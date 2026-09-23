@@ -1,5 +1,7 @@
 # Dynamic-tracking
 
+> **If you use this project, please cite it.** Paper link (placeholder, will be updated once the paper is published): https://arxiv.org/abs/0000.00000
+
 [![ROS 2](https://img.shields.io/badge/ROS%202-Humble%2B-blue)](#quick-start)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
