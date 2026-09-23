@@ -1,0 +1,15 @@
+# Python pip dependencies for dynamic_tracking (YOLO + numerics).
+#
+# ROS 2 packages (rclpy, cv_bridge, sensor_msgs, tf2_ros, vision_msgs, …)
+# are NOT listed here — install via ROS 2 / rosdep (see README and package.xml).
+#
+# Usage: create a venv, pip install -r requirements.txt, then colcon build
+# with PYTHONPATH unset. Export the venv site-packages only when running the node.
+#
+# IMPORTANT: Do NOT install opencv-python via pip — use system/ROS python3-opencv
+# to avoid NumPy version conflicts with cv_bridge.
+
+numpy>=1.23,<2
+ultralytics>=8.0.0
+onnxruntime>=1.16.0
+scipy>=1.9.0

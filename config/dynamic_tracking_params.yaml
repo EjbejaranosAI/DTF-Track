@@ -1,0 +1,317 @@
+# dynamic_tracking — TIAGO robot (real). Ver docs/TRACKING.md, docs/DRIFT_FIX.md
+
+dynamic_tracking_node:
+  ros__parameters:
+
+    enable_yolo_detections: true
+    model_name: "yolo26n.pt"
+    yolo_backend: ultralytics
+    yolo_onnx_model: "yolo26n_256.onnx"
+    yolo_onnx_providers: ["CPUExecutionProvider"]
+    yolo_onnx_intra_op_threads: 2
+    yolo_onnx_inter_op_threads: 1
+    device: "cuda:0"
+    confidence_threshold: 0.40
+    yolo_imgsz: 256
+    yolo_half: false
+    yolo_max_det: 7
+    yolo_frame_stride: 3
+    yolo_keep_latest_frame_only: true
+    yolo_cpu_num_threads: 2
+    target_classes: ["person"]
+    publish_annotated_image: true
+    publish_compressed_image: false
+    jpeg_quality: 70
+    # DOT + YOLO crops for pose_estimation (requires pose_estimation_interfaces)
+    publish_dot_yolo_crops: false
+    dot_yolo_crops_topic: "/dot_yolo_crops"
+    dot_yolo_crop_margin_px: 8.0
+
+    # --- Topics / QoS ---
+    image_topic: "/head_front_camera/color/image_raw"
+    detections_topic: "/detections"
+    annotated_image_topic: "/image_annotated"
+    lidar_topic: "/scan"
+    camera_info_topic: "/head_front_camera/color/camera_info"
+    depth_image_topic: "/head_front_camera/depth/image_rect_raw"
+    # TIAGO head_front_camera publica BEST_EFFORT (verificado tiago-pro-13c). Debe coincidir con el publisher.
+    image_qos_reliability: "best_effort"
+    # Salida /image_annotated: RViz y rqt_image_view suelen pedir RELIABLE (distinto de la cámara).
+    annotated_image_qos_reliability: "reliable"
+    lidar_qos_reliability: "best_effort"
+    lidar_qos_depth: 1
+    sensor_qos_depth: 10
+
+    # LiDAR inmediato en _scan_cb; Kalman a frecuencia /scan (no atado a cámara ~4 Hz)
+    enable_lidar_fusion: true
+    sync_image_with_lidar: false
+    lidar_track_on_scan: true
+    sensor_sync_slop_sec: 0.10
+    sensor_sync_queue_size: 4
+    lidar_fusion_use_scan_stamp_for_tf: true
+    use_tf_lidar_ray: true
+    lidar_ray_use_bbox_bottom: true
+    camera_horizontal_fov_deg: 69.4
+    lidar_angular_window_deg: 20.0
+    lidar_fusion_angle_offset_deg: 0.0
+    tf_lookup_timeout_sec: 0.05
+
+    # --- Tracking frame / Kalman ---
+    tracking_frame: "map"
+    min_track_distance_m: 0.20
+    max_track_distance_m: 10.0
+    lidar_blind_zone_radius_m: 0.0
+    kalman_predict_dt_cap_sec: 0.12
+    tracking_min_confirmed_hits: 2
+    use_mahalanobis_lidar: true
+    tracking_assoc_cost_threshold: 1.75
+    tracking_lidar_assoc_cost_threshold: 2.4
+    # Asociacion: subir umbral = mas tolerante (menos parpadeo); bajar = menos swaps pero mas perdidas.
+    tracking_person_lidar_assoc_cost_threshold: 1.45
+    tracking_max_missed_frames: 25
+    tracking_person_max_missed_frames: 90
+    person_lidar_only_max_missed_frames: 24
+    person_missed_debounce_frames: 2
+    person_lidar_max_correction_jump_m: 0.95   # rechaza correct() si salto > umbral (m)
+    person_static_zero_velocity_speed_m: 0.12
+    person_lidar_innovation_gate_m: 1.2        # rechaza medición lejos de la predicción (m)
+    person_lidar_innovation_gate_stale_rgb_sec: 8.0
+    person_hold_skip_lidar_association_sec: 0.0
+    max_occlusions_before_deletion: 20
+    max_occlusions_mature_track: 40
+    lidar_initiation_max_age_static_sec: 8.0
+    require_visual_confirmation: false
+    enable_image_only_assoc_fallback: true
+    image_only_assoc_min_iou: 0.18
+
+    # --- Scan verify (presencia; NO mueve la caja — solo evita missed++) ---
+    scan_verify_range_tolerance_m: 0.42
+    scan_verify_window_deg: 14.0
+    scan_verify_require_nearby_cluster: true
+    scan_verify_nearby_cluster_m: 0.60
+    scan_verify_nearby_min_leg_score: 0.50
+    person_track_leg_snap_enable: false
+    person_track_leg_snap_max_dist_m: 0.85
+    person_track_leg_snap_min_leg_score: 0.68
+    person_lidar_micro_stable_m: 0.0
+    person_track_leg_snap_min_jump_for_velocity_m: 0.45
+    person_track_leg_snap_max_velocity_mps: 1.0
+    person_track_leg_snap_require_spawn_tier_jump_m: 0.55
+
+    # --- Segmentación /scan ---
+    lidar_cluster_jump_m: 0.28
+    lidar_cluster_pose_mode: "median"
+    lidar_min_points_per_segment: 3
+    lidar_max_points_per_segment: 50
+    lidar_min_segment_width_m: 0.0
+
+    # Detectores + fusion (require_two = RF+AdaBoost o heurística piernas)
+    lidar_detectors_enabled: ["spencer_rf", "spencer_adaboost", "leg_heuristic"]
+    lidar_fusion_policy: "require_two"
+    lidar_fusion_any_high_threshold: 0.70
+    spencer_rf_model_path: "models/spencer_rf/lms500_0.25deg_height70cm_fr_rathausgasse_noetic.random_forest.gz"
+    spencer_rf_decision_threshold: 0.59
+    spencer_rf_only_positive_classifications: false
+    spencer_rf_postfilter_min_confidence: 0.0
+    spencer_adaboost_model_path: "models/spencer_adaboost/lms500_0.25deg_height70cm_rathausgasse.adaboost"
+    spencer_adaboost_decision_threshold: -10.5
+    leg_candidate_enable: true
+    leg_min_span_deg: 2.5
+    leg_max_span_deg: 24.0
+    leg_max_range_spread_ratio: 0.15
+    leg_min_chord_m: 0.09
+    leg_max_chord_m: 0.50
+    leg_heuristic_detector_min_score: 0.54
+    leg_hypothesis_min_score: 0.65
+    spawn_unknown_from_lidar: false
+    leg_hypothesis_as_person: true
+
+    # Dual-tier: spawn estricto / mantenimiento laxo
+    lidar_dual_tier_enable: true
+    # true = RF + AdaBoost + leg_heuristic deben coincidir para abrir ID (fusion unanimous)
+    lidar_spawn_require_all_detectors: false
+    lidar_spawn_fusion_policy: "require_two"
+    lidar_maintenance_fusion_policy: "max_score"
+    lidar_maintenance_min_leg_score: 0.58
+    lidar_spawn_person_min_leg_score: 0.55
+    lidar_spawn_confirm_frames: 2
+    lidar_spawn_confirm_radius_m: 0.40
+    lidar_spawn_same_frame_dedup_m: 0.45
+    person_lidar_spawn_suppress_radius_m: 0.55
+    person_lidar_spawn_suppress_rgb_sec: 4.0
+    spawn_initiator_max_step_displacement_m: 0.85
+    spawn_initiator_max_velocity_mps: 2.2
+    person_track_dual_audit_enable: true
+    person_track_dual_audit_interval_frames: 10
+    person_track_dual_audit_radius_m: 0.45
+    # Auditoria en scan_verify: usa tier maintenance (max_score), no spawn-tier (3 detectores).
+
+    # --- Merge / dedup IDs ---
+    person_track_map_merge_min_iou: 0.24
+    person_track_map_merge_box_m: 0.95
+    person_track_map_merge_lidar_only: false
+    duplicate_track_temporal_enable: true
+    duplicate_track_compare_samples: 10
+    duplicate_track_must_match: 7
+    duplicate_track_max_dist_m: 0.38
+    duplicate_track_lidar_only: false
+
+    # --- Dinámico real (etiqueta dym) ---
+    person_dynamic_window_sec: 2.0
+    person_dynamic_min_displacement_m: 0.60
+    person_dynamic_pose_history_sec: 4.0
+    person_dynamic_classes: ["person"]
+    dynamic_person_suffix_in_class_id: false
+    motion_speed_threshold_mps: 0.06
+    motion_accel_threshold_mps2: 0.04
+
+    # Costmap Nav2 off en TIAGO real (filtraba clusters). Mapa estático on.
+    map_filter_enable: false
+    costmap_topic: "/global_costmap/costmap"
+    occupancy_threshold: 253
+    map_filter_inflation_threshold: 0
+    map_filter_unknown_as_free: true
+    map_filter_neighbor_radius_cells: 0
+
+    # --- Filtro mapa estático /map (paredes, sin costmap Nav2) ---
+    # neighbor_radius_cells: margen cuadrado alrededor del centro (~res*cells m; res≈0.05 → 10≈0.5 m).
+    # disk_radius_m: círculo Spencer; si fracción libre < disk_min_free_ratio → descarta (patas en esquina/pared).
+    static_map_filter_enable: true
+    static_map_topic: "/map"
+    static_map_occupied_threshold: 65
+    # Margen ~0.5 m en mapa 5 cm/celda: 10 celdas; disco Spencer 0.5 m
+    static_map_neighbor_radius_cells: 10
+    static_map_corner_probe_enable: true
+    static_map_probe_radius_m: 0.11
+    static_map_corner_probe_radius_m: 0.15
+    static_map_disk_filter_enable: true
+    static_map_disk_radius_m: 0.5
+    static_map_disk_min_free_ratio: 0.70
+    static_map_disk_permit_outside_map: true
+    static_map_keep_cluster_if_tf_fails: false
+    reject_lidar_rgb_fusion_on_static_map: true
+
+    # ROI map: x=[2,9], y=[-5,2]
+    area_filter_enable: true
+    area_filter_frame: "map"
+    area_filter_publish_markers: true
+    detection_area_marker_topic: "/detection_area_markers"
+    area_filter_x_min: 2.0
+    area_filter_x_max: 9.0
+    area_filter_y_min: -5.0
+    area_filter_y_max: 2.0
+    area_filter_zones_json: "[]"
+
+    # --- YOLO auxiliar (solo metadata, no mueve Kalman) ---
+    yolo_visual_lidar_parity: true
+    yolo_auxiliary_reject_in_fov_enable: false
+    yolo_auxiliary_reject_in_fov_frames: 8
+    yolo_auxiliary_reject_prune_missed_frames: 9999
+    marker_color_coast_bgr: [180, 200, 40]
+    person_rgb_coast_cl_sec: 4.0
+    person_yolo_seen_green_sec: 0.70
+    person_yolo_assoc_iou_min: 0.20
+    yolo_auxiliary_confirm_max_dist_m: 3.05
+    yolo_auxiliary_min_track_hits: 1
+    yolo_auxiliary_distance_match_lidar_ray_only: true
+    yolo_auxiliary_use_lidar_ray_match: true
+    yolo_auxiliary_project_tracks_to_image: true
+    yolo_auxiliary_projection_height_m: 1.0
+    yolo_auxiliary_projection_bbox_margin_px: 8.0
+    yolo_auxiliary_projection_tf_extra_timeout_sec: 0.0
+    yolo_auxiliary_bearing_match_enable: true
+    yolo_auxiliary_bearing_match_max_rad: 0.28
+    yolo_auxiliary_polar_match_enable: true
+    yolo_auxiliary_polar_match_max_range_m: 3.2
+    yolo_auxiliary_polar_match_max_bearing_rad: 0.45
+    yolo_sync_wait_max_sec: 0.0
+    yolo_assoc_max_stamp_skew_sec: 0.02
+    yolo_assoc_fallback_latest: false
+    yolo_latest_max_age_sec: 1.0
+    yolo_annotated_pair_with_infer: true
+    image_track_overlay_max_age_sec: 0.30
+
+    # --- RViz markers ---
+    marker_topic: "/dynamic_tracks_markers"
+    marker_visualization_frame: ""
+    marker_remap_prefer_latest_tf: false
+    marker_remap_try_image_stamp_fallback: true
+    marker_remap_allow_latest_fallback: false
+    marker_remap_tf_timeout_sec: 0.0
+    marker_remap_stale_tf_cache_sec: 0.75
+    # RViz: >0 suaviza 1-2 ciclos sin publicar (no evita cambio de ID si el track se borra).
+    marker_lifetime_sec: 0.4
+    marker_bbox_alpha: 0.85
+    marker_bbox_wireframe: false
+    marker_bbox_line_width_m: 0.03
+    marker_bbox_use_velocity_heading: true
+    marker_bbox_heading_min_speed_mps: 0.06
+    marker_text_scale_z: 0.28
+    marker_compact_map_labels: true
+    marker_text_height_m: 1.55
+    marker_text_use_track_color: false
+    marker_text_color_r: 0.06
+    marker_text_color_g: 0.06
+    marker_text_color_b: 0.10
+    marker_label_ring_radius_m: 0.35
+    marker_label_z_stagger_m: 0.06
+    marker_uncertain_static_lidar_person: true
+    marker_hide_uncertain_static_lidar_person: false
+    marker_hide_person_if_missed_frames: 0
+    person_lidar_uncertain_stale_rgb_sec: 6.0
+    person_box_size_xy_m: 0.6
+    person_box_height_m: 1.7
+    unknown_box_size_xy_m: 0.4
+    unknown_box_height_m: 1.2
+    publish_unknown_markers: true
+    unknown_min_speed_mps: 0.10
+    lidar_only_markers_require_motion: false
+    publish_lidar_cluster_markers: false
+    lidar_cluster_marker_diameter_m: 0.14
+    draw_lidar_only_on_image: false
+    publish_track_trajectory_markers: true
+    track_trajectory_z_m: 0.06
+    track_trajectory_line_width_m: 0.035
+    track_trajectory_alpha: 0.65
+    publish_track_history_cones: false
+    track_history_max_markers: 28
+    track_history_cylinder_height_min_m: 0.035
+    track_history_cylinder_height_max_m: 0.14
+    track_history_cylinder_diameter_min_m: 0.05
+    track_history_cylinder_diameter_max_m: 0.12
+    track_history_alpha_min: 0.12
+    track_history_alpha_max: 0.52
+    track_history_z_m: 0.02
+
+    # --- Blob (opcional; activar en lidar_detectors_enabled) ---
+    blob_min_points: 4.0
+    blob_max_points: 25.0
+    blob_min_width_m: 0.05
+    blob_max_width_m: 0.55
+    blob_max_range_m: 20.0
+
+    # --- Cámara fallback (legacy; declarados para compat) ---
+    enable_camera_map_fallback: true
+    camera_only_depth_m: 3.0
+    use_depth_for_camera_fallback: true
+    depth_time_tolerance_sec: 0.35
+
+    # --- Debug / logs ---
+    log_verbose_startup: false
+    log_pipeline_timing_sec: 0.0
+    log_person_tracks_sec: 2.0
+    log_lidar_diag_sec: 0.0
+    log_spencer_extract_diag_sec: 0.0
+    yolo_debug_draw_track_projections: false
+    yolo_debug_laser_polar_markers: false
+    yolo_debug_laser_polar_topic: "/dynamic_tracking/yolo_laser_polar_markers"
+    yolo_debug_laser_polar_line_width_m: 0.022
+    yolo_republish_markers_after_aux: false
+
+    # --- TF projection debug ---
+    debug_tf_projection: false
+    debug_tf_log_interval_sec: 1.0
+    lidar_cluster_use_stamped_tf: false
+    debug_pose_log_enable: false
+    debug_pose_log_interval_sec: 0.1   # solo si debug_pose_log_enable o debug:=true
+    debug_pose_robot_frame: "base_link"

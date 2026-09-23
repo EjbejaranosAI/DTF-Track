@@ -1,0 +1,58 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#e8f4fc',
+  'primaryBorderColor': '#2563eb',
+  'primaryTextColor': '#0f172a',
+  'lineColor': '#475569',
+  'secondaryColor': '#fef3c7',
+  'tertiaryColor': '#dcfce7',
+  'fontSize': '14px'
+}}}%%
+flowchart TB
+  subgraph IN["Entrada sensores"]
+    direction LR
+    IMG["Image"]
+    SCN["LaserScan /scan"]
+  end
+
+  SYN["ApproximateTime sync<br/>imagen + laser"]
+
+  subgraph LID["Pipeline LiDAR — dynamic_tracking_node"]
+    direction TB
+    SEG["segment_scan<br/>jump-distance 1x"]
+    DET["Detectores paralelos<br/>RF · AdaBoost · heuristica · blob"]
+    FUS["fusion<br/>max_score / require_two"]
+    FLT["Filtros<br/>/map + costmap"]
+    TRK["Kalman + Hungarian<br/>posicion solo laser"]
+  end
+
+  subgraph YO["YOLO auxiliar — metadatos"]
+    direction TB
+    YD["YOLO background thread"]
+    YA["confirmacion person<br/>bbox · color RViz"]
+  end
+
+  subgraph OUT["Salidas ROS"]
+    direction LR
+    MK["/dynamic_tracks_markers<br/>tracks RViz"]
+    DT["/detections/tracked"]
+    AN["/image_annotated"]
+  end
+
+  IMG --> SYN
+  SCN --> SYN
+  SYN --> SEG
+  SEG --> DET --> FUS --> FLT --> TRK
+  SYN --> YD --> YA
+  YA -. "no correct Kalman" .-> TRK
+  TRK --> MK
+  TRK --> DT
+  YA --> AN
+
+  classDef input fill:#dbeafe,stroke:#2563eb,color:#0f172a
+  classDef lidar fill:#dcfce7,stroke:#16a34a,color:#0f172a
+  classDef yolo fill:#fef3c7,stroke:#d97706,color:#0f172a
+  classDef out fill:#f3e8ff,stroke:#7c3aed,color:#0f172a
+  class IMG,SCN input
+  class SEG,DET,FUS,FLT,TRK lidar
+  class YD,YA yolo
+  class MK,DT,AN out

@@ -1,0 +1,17 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#dcfce7',
+  'primaryBorderColor': '#16a34a',
+  'fontSize': '14px'
+}}}%%
+flowchart LR
+  SCN["/scan"] --> SEG["segment_scan"]
+  SEG --> RF["spencer_rf"]
+  SEG --> ADA["spencer_adaboost"]
+  SEG --> HEU["leg_heuristic"]
+  SEG --> BLB["blob"]
+  RF --> FUS["fusion"]
+  ADA --> FUS
+  HEU --> FUS
+  BLB --> FUS
+  FUS --> FLT["mapa + costmap"]
+  FLT --> TRK["Kalman"]

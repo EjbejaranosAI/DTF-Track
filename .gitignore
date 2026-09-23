@@ -1,0 +1,21 @@
+# Referencias locales / ejemplos no versionados
+example/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+*.egg-info/
+.eggs/
+dist/
+build/
+old_spencer/
+docs/draft_paper.md
+# Ultralytics downloads / export artifacts in repo root
+yolo26n.pt
+yolo26n.onnx
+*.pt
