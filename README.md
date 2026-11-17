@@ -1,6 +1,8 @@
-# Dynamic-tracking
+# DTF-Track: Dual-Tier Fusion for People Tracking
 
-> **If you use this project, please cite it.** Paper link (placeholder, will be updated once the paper is published): https://arxiv.org/abs/0000.00000
+> 📄 **ROBOT 2026 – Iberian Robotics Conference** · 🌐 [Project page](https://ejbejaranosai.github.io/dtf-track/) · 📝 [How to cite](#citation)
+>
+> **If you use DTF-Track (code, models or results) in your research, please cite our paper.** See [Citation](#citation) below.
 
 [![ROS 2](https://img.shields.io/badge/ROS%202-Humble%2B-blue)](#quick-start)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](#requirements)
@@ -315,10 +317,28 @@ dynamic_tracking/
 
 ---
 
+## Citation
+
+If you use this tool in your work, please cite:
+
+```bibtex
+@inproceedings{bejarano2026dtftrack,
+  title     = {{DTF-Track}: Dual-Tier Fusion for People Tracking},
+  author    = {Bejarano, Edison and Bo, Valerio and Garrell, Ana{\'i}s and Sanfeliu, Alberto},
+  booktitle = {ROBOT 2026: Iberian Robotics Conference},
+  year      = {2026}
+}
+```
+
+GitHub's **"Cite this repository"** button (right sidebar) uses [`CITATION.cff`](CITATION.cff).
+
+---
+
 ## Acknowledgements
 
 - **IRI** — Institut de Robòtica i Informàtica Industrial (CSIC-UPC)
 - **UPC** — Universitat Politècnica de Catalunya · BarcelonaTech
+- Supported by JST Moonshot R&D (grant JPMJMS2011) and the EU project TORNADO (HORIZON-CL4-2024-DIGITAL-EMERGING-01-101189557).
 
 <p align="center">
   <img src="imgs/iri_logo.jpeg" alt="IRI logo" height="72" />

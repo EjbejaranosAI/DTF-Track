@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use DTF-Track, please cite the paper below."
+title: "DTF-Track"
+type: software
+repository-code: "https://github.com/EjbejaranosAI/DTF-Track"
+url: "https://ejbejaranosai.github.io/dtf-track/"
+license: MIT
+authors:
+  - family-names: Bejarano
+    given-names: Edison
+  - family-names: Bo
+    given-names: Valerio
+  - family-names: Garrell
+    given-names: Anaís
+  - family-names: Sanfeliu
+    given-names: Alberto
+preferred-citation:
+  type: conference-paper
+  title: "DTF-Track: Dual-Tier Fusion for People Tracking"
+  authors:
+    - family-names: Bejarano
+      given-names: Edison
+    - family-names: Bo
+      given-names: Valerio
+    - family-names: Garrell
+      given-names: Anaís
+    - family-names: Sanfeliu
+      given-names: Alberto
+  conference:
+    name: "ROBOT 2026: Iberian Robotics Conference"
+  year: 2026
