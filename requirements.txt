@@ -13,3 +13,6 @@ numpy>=1.23,<2
 ultralytics>=8.4.0   # YOLO26 needs 8.4+
 onnxruntime>=1.16.0
 scipy>=1.9.0
+# torch/ultralytics pull a recent setuptools (>=71) that needs packaging>=22; Ubuntu 22.04 ships
+# python3-packaging 21.3 -> colcon build fails with canonicalize_version(... strip_trailing_zero).
+packaging>=22

@@ -154,6 +154,7 @@ All weights are in `models/` and are installed with the package.
 | Problem | Fix |
 |---|---|
 | `option --uninstall not recognized` or `PackageNotFoundError: dynamic_tracking` | The venv was on `PYTHONPATH` while building: `unset PYTHONPATH`, delete `build/dynamic_tracking install/dynamic_tracking`, rebuild |
+| `TypeError: canonicalize_version() got an unexpected keyword argument 'strip_trailing_zero'` | Recent `setuptools` (≥71, pulled by torch) with an old `packaging` (<22, e.g. Ubuntu 22.04): `unset PYTHONPATH`, delete `build/dynamic_tracking install/dynamic_tracking`, rebuild. If you used `pip install --user`: `pip install --user "packaging>=22"` |
 | `No module named 'ultralytics'` / `'onnxruntime'` | Export the venv `PYTHONPATH` (step 3) before launching |
 | No tracks at all | Check `/scan` and the `map` TF (`ros2 run tf2_ros tf2_echo map <laser_frame>`); on another map use `area_filter_enable:=false` |
 | No `/image_annotated` | Check the camera topic (`ros2 topic hz <image_topic>`); TIAGo cameras need `image_qos_reliability:=best_effort` |
