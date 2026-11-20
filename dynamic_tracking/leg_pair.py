@@ -63,3 +63,46 @@ def leg_pair_for_track(
     if a1 <= a2:
         return True, x1, y1, x2, y2
     return True, x2, y2, x1, y1
+
+
+def merge_leg_pairs(
+    meas: Sequence[LidarMeasurement],
+    max_separation_m: float,
+) -> List[LidarMeasurement]:
+    """Merge the two legs of one person into a single measurement at their midpoint.
+
+    Each LiDAR measurement is one leg, so a walking person alternates left/right
+    and the track jitters (and the second leg can open its own ID). Pairs are
+    formed greedily, closest first, between measurements at most
+    ``max_separation_m`` apart (TIAGo data: one person's legs 0.16-0.57 m, 100 %
+    <= 0.6 m). Unpaired measurements (one leg visible) are kept as they are.
+    """
+    n = len(meas)
+    if max_separation_m <= 0.0 or n < 2:
+        return list(meas)
+    pairs = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            d = math.hypot(meas[i].map_x - meas[j].map_x, meas[i].map_y - meas[j].map_y)
+            if d <= max_separation_m:
+                pairs.append((d, i, j))
+    if not pairs:
+        return list(meas)
+    pairs.sort()
+    used = [False] * n
+    out: List[LidarMeasurement] = []
+    for _, i, j in pairs:
+        if used[i] or used[j]:
+            continue
+        used[i] = used[j] = True
+        a, b = meas[i], meas[j]
+        out.append(
+            LidarMeasurement(
+                map_x=0.5 * (a.map_x + b.map_x),
+                map_y=0.5 * (a.map_y + b.map_y),
+                leg_candidate_score=max(a.leg_candidate_score, b.leg_candidate_score),
+                spawn_tier_pass=a.spawn_tier_pass or b.spawn_tier_pass,
+            )
+        )
+    out.extend(m for k, m in enumerate(meas) if not used[k])
+    return out

@@ -428,6 +428,48 @@ def _cluster_to_measurement(
     )
 
 
+def repair_interleaved_returns(
+    scan: LaserScan,
+    half_window: int,
+    max_range_m: float,
+    jump_m: float,
+) -> LaserScan:
+    """Fill background beams interleaved inside a close object (TIAGo virtual laser).
+
+    Beside the robot the merged /scan alternates beams between a person (~0.4 m) and
+    what lies behind (0.75 m, 6 m, NaN), so jump segmentation shreds the person into
+    1-3 point pieces. A beam is filled when there is a closer return on BOTH sides
+    within half_window beams (morphological closing, so edges and isolated points do
+    not grow), that return is < max_range_m and closer by more than jump_m.
+    Far objects are untouched. Returns a new LaserScan (input is not modified).
+    """
+    if half_window <= 0 or not scan.ranges:
+        return scan
+    r = np.asarray(scan.ranges, dtype=np.float64)
+    valid = np.isfinite(r) & (r >= scan.range_min) & (r <= scan.range_max)
+    rv = np.where(valid, r, np.inf)
+    n = rv.size
+    padded = np.concatenate([np.full(half_window, np.inf), rv, np.full(half_window, np.inf)])
+    left = np.min(np.stack([padded[k:k + n] for k in range(half_window)]), axis=0)
+    right = np.min(
+        np.stack([padded[k:k + n] for k in range(half_window + 1, 2 * half_window + 1)]), axis=0
+    )
+    near = np.maximum(left, right)
+    with np.errstate(invalid="ignore"):
+        fill = (near < max_range_m) & (rv - near > jump_m)
+    if not fill.any():
+        return scan
+    out = LaserScan()
+    out.header = scan.header
+    out.angle_min, out.angle_max = scan.angle_min, scan.angle_max
+    out.angle_increment, out.time_increment = scan.angle_increment, scan.time_increment
+    out.scan_time = scan.scan_time
+    out.range_min, out.range_max = scan.range_min, scan.range_max
+    out.ranges = np.where(fill, near, r).astype(np.float32).tolist()
+    out.intensities = scan.intensities
+    return out
+
+
 def _segment_scan(
     scan: LaserScan,
     lidar_cluster_jump_m: float,

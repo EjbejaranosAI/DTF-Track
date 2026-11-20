@@ -8,15 +8,15 @@
 #   ./scripts/record_experiment_bag.sh T1 run01
 #   ./scripts/record_experiment_bag.sh T2 run02 figura8
 #
-# Carpeta de bags (por defecto ~/iri-lab/rosbag_edison). Override:
-#   BAG_ROOT=/otra/ruta ./scripts/record_experiment_bag.sh T1 run01
+# Bag folder (default ~/rosbags/dtf_track). Override:
+#   BAG_ROOT=/other/path ./scripts/record_experiment_bag.sh T1 run01
 #
 # Antes de grabar: dynamic_tracking lanzado, /scan y /detections/tracked con Hz.
 
 set -euo pipefail
 
 ROBOT_ID="${ROBOT_ID:-tiago-pro-13c}"
-BAG_ROOT="${BAG_ROOT:-$HOME/iri-lab/rosbag_edison}"
+BAG_ROOT="${BAG_ROOT:-$HOME/rosbags/dtf_track}"
 QOS_OVERRIDES="${QOS_OVERRIDES:-$BAG_ROOT/qos_overrides.yaml}"
 
 # ─── Catálogo de experimentos (orden sugerido de sesión) ─────────────────

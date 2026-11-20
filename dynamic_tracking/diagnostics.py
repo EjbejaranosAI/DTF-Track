@@ -1,6 +1,7 @@
 """Pipeline timing and LiDAR diagnostic logging (extracted from node)."""
 
 import math
+import threading
 import time
 from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional
@@ -45,6 +46,53 @@ class PipelineTiming:
             )
         else:
             logger.info(f"Pipeline timing: cycle ~{total_ms:.0f} ms (rest ~{rest_ms:.0f} ms)")
+
+
+class StageTimer:
+    """Per-stage wall time (avg/max ms + Hz), thread-safe; logs every interval."""
+
+    def __init__(self, log_interval_sec: float) -> None:
+        self.interval = log_interval_sec
+        self._lock = threading.Lock()
+        self._stats: Dict[str, list] = {}
+        self._t0: Optional[float] = None
+
+    @property
+    def enabled(self) -> bool:
+        return self.interval > 0
+
+    def record(self, stage: str, ms: float) -> None:
+        if self.interval <= 0:
+            return
+        with self._lock:
+            s = self._stats.setdefault(stage, [0, 0.0, 0.0])
+            s[0] += 1
+            s[1] += ms
+            s[2] = max(s[2], ms)
+
+    def lap(self, stage: str, t_start: float) -> float:
+        """Record time since t_start (perf_counter) under stage; return now for the next lap."""
+        now = time.perf_counter()
+        self.record(stage, (now - t_start) * 1000.0)
+        return now
+
+    def log_if_due(self, logger) -> None:
+        if self.interval <= 0:
+            return
+        now = time.perf_counter()
+        with self._lock:
+            if self._t0 is None:
+                self._t0 = now
+                return
+            dt = now - self._t0
+            if dt < self.interval:
+                return
+            stats, self._stats, self._t0 = self._stats, {}, now
+        parts = [
+            f"{name}: {n / dt:.1f}Hz avg={tot / n:.0f}ms max={mx:.0f}ms"
+            for name, (n, tot, mx) in sorted(stats.items())
+        ]
+        logger.info("Stage timing (" + f"{dt:.1f}s): " + " | ".join(parts))
 
 
 def map_xy_to_robot_frame(

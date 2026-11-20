@@ -10,6 +10,6 @@
 # to avoid NumPy version conflicts with cv_bridge.
 
 numpy>=1.23,<2
-ultralytics>=8.0.0
+ultralytics>=8.4.0   # YOLO26 needs 8.4+
 onnxruntime>=1.16.0
 scipy>=1.9.0

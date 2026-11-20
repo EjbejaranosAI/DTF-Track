@@ -21,6 +21,8 @@ class YoloMeasurement:
     # permite matching sin TF a mapa (fase polar en apply_yolo_auxiliary).
     laser_range_m: Optional[float] = None
     laser_bearing_rad: Optional[float] = None
+    # Embedding Re-ID (OSNet, L2-normalizado) si se calculo para esta caja.
+    embedding: Optional[np.ndarray] = None
 
 
 @dataclass
@@ -101,9 +103,28 @@ class Track:
         self.motion_pose_history: Deque[Tuple[float, float, float]] = deque(maxlen=48)
         # Anillo de posiciones (x,y) tras cada ciclo: duplicados temporales (Spencer) + trayectoria RViz.
         self.pose_trail_ring: Deque[Tuple[float, float]] = deque(maxlen=64)
+        # Mayor distancia (m) del estado Kalman al punto de nacimiento: una persona que ya
+        # camino no es un mueble aunque ahora este quieta.
+        self.spawn_xy = (float(map_x), float(map_y))
+        self.max_travel_from_spawn_m = 0.0
         self.motion_dynamic_confirmed = False
         # Spencer occlusion: separate counter for out-of-FOV cycles.
         self.consecutive_occlusions = 0
+        # Posicion suavizada solo para visualizacion (RViz); el tracking usa state().
+        self.display_xy: Optional[Tuple[float, float]] = None
+        # Re-ID por apariencia (identity.py): embeddings de los crops YOLO person asociados.
+        self.reid_appearance: Optional[np.ndarray] = None
+        self.reid_bank: Optional[Deque[np.ndarray]] = None
+        self.reid_last_emb: Optional[np.ndarray] = None
+        self.reid_last_raw: Optional[np.ndarray] = None  # objeto de la cache (detectar repetidos)
+        self.reid_last_emb_sec = 0.0
+        self.reid_last_bank_sec = 0.0
+        self.reid_last_eval_sec = 0.0
+        self.reid_first_rgb_sec = 0.0
+        self.reid_samples = 0
+        self.reid_matched = False
+        self.reid_restored_from: Optional[int] = None
+        self.reid_name: Optional[str] = None
 
         # EKF 2D CV (Spencer srl_nearest_neighbor_tracker): [x,y,vx,vy], medicion [x,y].
         self.kf = ConstantVelocityEKF(
@@ -124,6 +145,22 @@ class Track:
 
     def state(self) -> Tuple[float, float]:
         return float(self.kf.statePost[0, 0]), float(self.kf.statePost[1, 0])
+
+    def update_display(self, alpha: float, snap_m: float) -> None:
+        """EMA of state() for drawing only. alpha=1 -> raw state; a jump > snap_m resets
+        (re-association), so the box does not slide across the room."""
+        x, y = self.state()
+        if self.display_xy is None or alpha >= 1.0:
+            self.display_xy = (x, y)
+            return
+        dx, dy = x - self.display_xy[0], y - self.display_xy[1]
+        if snap_m > 0.0 and (dx * dx + dy * dy) > snap_m * snap_m:
+            self.display_xy = (x, y)
+            return
+        self.display_xy = (self.display_xy[0] + alpha * dx, self.display_xy[1] + alpha * dy)
+
+    def display_position(self) -> Tuple[float, float]:
+        return self.display_xy if self.display_xy is not None else self.state()
 
     def association_position(self) -> Tuple[float, float]:
         """Posicion previa a correct(): statePre tras predict() (Spencer / EKF)."""
@@ -167,6 +204,10 @@ class Track:
         """Una muestra por ciclo (estado Kalman en mapa/tracking_frame)."""
         mx, my = self.state()
         self.pose_trail_ring.append((float(mx), float(my)))
+        self.max_travel_from_spawn_m = max(
+            self.max_travel_from_spawn_m,
+            math.hypot(mx - self.spawn_xy[0], my - self.spawn_xy[1]),
+        )
 
     def record_map_pose_after_correct(self, stamp_sec: float, history_keep_sec: float) -> None:
         mx, my = self.state()

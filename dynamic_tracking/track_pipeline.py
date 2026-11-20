@@ -17,6 +17,7 @@ import numpy as np
 from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
 
 from .association import assign_measurements, assoc_class_key, measurement_cost
+from .identity import ReIdConfig, add_track_appearance
 
 try:
     from scipy.optimize import linear_sum_assignment as _lsa_person_iou
@@ -697,6 +698,7 @@ def apply_yolo_auxiliary_person_confirmation(
     polar_match_max_range_m: float = 1.0,
     polar_match_max_bearing_rad: float = 0.45,
     track_laser_polar: Optional[Dict[int, Tuple[float, float]]] = None,
+    reid_cfg: Optional[ReIdConfig] = None,
 ) -> Set[int]:
     """Sin tocar Kalman: confirma person en tracks laser existentes. Devuelve indices matcheados."""
 
@@ -712,6 +714,8 @@ def apply_yolo_auxiliary_person_confirmation(
         if cn in ("person", "unknown"):
             tr.class_name = "person"
         tr.leg_hypothesis_active = False
+        if ym.embedding is not None and reid_cfg is not None:
+            add_track_appearance(tr, ym.embedding, stamp_sec, reid_cfg)
 
     return _yolo_auxiliary_match_classes(
         tracks,
@@ -842,6 +846,8 @@ def update_tracks(
     # Spencer Logic Initiator: separate limits for never-RGB tracks
     person_lidar_only_max_missed_frames: int = 20,
     lidar_initiation_max_age_static_sec: float = 8.0,
+    # Tracks que ya se alejaron > esto de su nacimiento no se podan por estaticos. 0 = off.
+    lidar_initiation_static_min_travel_m: float = 0.0,
     # Spencer occlusion: tracks outside LiDAR FOV are OCCLUDED (not MISSED).
     max_occlusions_before_deletion: int = 120,
     # Spencer: tracks maduros aguantan mas ciclos oclusos (detras del robot). 0 = mismo limite que arriba.
@@ -1702,11 +1708,16 @@ def update_tracks(
         if tr.consecutive_occlusions > _occlusion_limit_for_track(tr):
             continue
         # Spencer Logic Initiator: never-RGB LiDAR person tracks that are static
-        # and old enough without reaching confirmed hits → prune (wall/furniture).
+        # and old enough → prune (wall/furniture), unless they already walked away
+        # from where they were born (a real person standing still).
         if (
             tr.class_name == "person"
             and tr.last_rgb_person_sec <= 0.0
             and lidar_initiation_max_age_static_sec > 0.0
+            and not (
+                lidar_initiation_static_min_travel_m > 0.0
+                and tr.max_travel_from_spawn_m > lidar_initiation_static_min_travel_m
+            )
         ):
             age = stamp_sec - getattr(tr, "created_sec", stamp_sec)
             if age > lidar_initiation_max_age_static_sec:

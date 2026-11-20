@@ -19,3 +19,9 @@ docs/draft_paper.md
 yolo26n.pt
 yolo26n.onnx
 *.pt
+# Experiment datasets (large .pkl recordings): kept on the lab PC, share via Git LFS if needed
+training_detectors/data/**/*.pkl
+training_detectors/experiments/*/data/
+
+# archify working folders (finalize receipts, screenshots)
+.archify/

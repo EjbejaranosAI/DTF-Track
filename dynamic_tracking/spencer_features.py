@@ -464,8 +464,12 @@ def build_segments_from_scan(
     cluster_indices: List[List[int]],
     angle_min: float,
     angle_max: float,
-) -> List[Segment]:
+) -> List[Optional[Segment]]:
     """Build ``Segment`` objects from pre-clustered scan indices.
+
+    The result is aligned with ``cluster_indices``: element i describes cluster i,
+    or is None when that cluster has < 2 points. Callers index it by cluster
+    position, so skipped clusters must not shift the following ones.
 
     Parameters
     ----------
@@ -474,9 +478,11 @@ def build_segments_from_scan(
     cluster_indices : List of lists of scan indices per cluster.
     angle_min, angle_max : FOV boundaries of the laser.
     """
+    aligned: List[Optional[Segment]] = []
     segments: List[Segment] = []
     for idx_list in cluster_indices:
         if len(idx_list) < 2:
+            aligned.append(None)
             continue
         idx = np.array(idx_list, dtype=np.intp)
         a = angles[idx]
@@ -502,6 +508,7 @@ def build_segments_from_scan(
         d_hi = abs(np.arctan2(-np.sin(angle_max), np.cos(angle_max)) - seg.max_angle)
         seg.angular_distance_to_closest_boundary = min(abs(d_lo), abs(d_hi))
         segments.append(seg)
+        aligned.append(seg)
 
     # Fill preceding/succeeding points (neighbor context for Feature33)
     for i, seg in enumerate(segments):
@@ -510,4 +517,4 @@ def build_segments_from_scan(
         if i < len(segments) - 1:
             seg.succeeding_point = segments[i + 1].points[0].copy()
 
-    return segments
+    return aligned

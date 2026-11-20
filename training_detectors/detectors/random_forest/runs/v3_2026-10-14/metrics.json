@@ -1,0 +1,307 @@
+{
+  "run": "v3_2026-10-14",
+  "detector": "rf",
+  "min_map_agreement": 0.5,
+  "totals": {
+    "person": 13585,
+    "not_person": 126084
+  },
+  "leave_one_group_out": {
+    "moving": {
+      "leg_heuristic": {
+        "auc": 0.7288,
+        "tp_at_fp5": 0.0845,
+        "tp_at_fp2": 0.0292,
+        "tp_at_fp1": 0.0029
+      },
+      "adaboost viejo (Spencer)": {
+        "auc": 0.713,
+        "tp_at_fp5": 0.2682,
+        "tp_at_fp2": 0.1283,
+        "tp_at_fp1": 0.0816
+      },
+      "rf viejo (Spencer)": {
+        "auc": 0.8998,
+        "tp_at_fp5": 0.688,
+        "tp_at_fp2": 0.5918,
+        "tp_at_fp1": 0.4431
+      },
+      "adaboost desplegado (v2)": {
+        "auc": 0.9963,
+        "tp_at_fp5": 0.9883,
+        "tp_at_fp2": 0.9796,
+        "tp_at_fp1": 0.9796
+      },
+      "adaboost NUEVO": {
+        "auc": 0.9954,
+        "tp_at_fp5": 0.9854,
+        "tp_at_fp2": 0.9854,
+        "tp_at_fp1": 0.9825
+      },
+      "rf NUEVO": {
+        "auc": 0.996,
+        "tp_at_fp5": 0.9913,
+        "tp_at_fp2": 0.9854,
+        "tp_at_fp1": 0.9592
+      },
+      "adaboost Y rf NUEVOS": {
+        "auc": 0.9962,
+        "tp_at_fp5": 0.9854,
+        "tp_at_fp2": 0.9854,
+        "tp_at_fp1": 0.9767
+      },
+      "_n": {
+        "person": 343,
+        "not_person": 6516
+      }
+    },
+    "pos1": {
+      "leg_heuristic": {
+        "auc": 0.8137,
+        "tp_at_fp5": 0.4683,
+        "tp_at_fp2": 0.4087,
+        "tp_at_fp1": 0.3316
+      },
+      "adaboost viejo (Spencer)": {
+        "auc": 0.5141,
+        "tp_at_fp5": 0.1644,
+        "tp_at_fp2": 0.1071,
+        "tp_at_fp1": 0.074
+      },
+      "rf viejo (Spencer)": {
+        "auc": 0.6552,
+        "tp_at_fp5": 0.2498,
+        "tp_at_fp2": 0.2498,
+        "tp_at_fp1": 0.2133
+      },
+      "adaboost desplegado (v2)": {
+        "auc": 0.9995,
+        "tp_at_fp5": 0.9994,
+        "tp_at_fp2": 0.9955,
+        "tp_at_fp1": 0.9914
+      },
+      "adaboost NUEVO": {
+        "auc": 0.9616,
+        "tp_at_fp5": 0.6443,
+        "tp_at_fp2": 0.3195,
+        "tp_at_fp1": 0.3029
+      },
+      "rf NUEVO": {
+        "auc": 0.9639,
+        "tp_at_fp5": 0.7978,
+        "tp_at_fp2": 0.0,
+        "tp_at_fp1": 0.0
+      },
+      "adaboost Y rf NUEVOS": {
+        "auc": 0.9632,
+        "tp_at_fp5": 0.7017,
+        "tp_at_fp2": 0.3516,
+        "tp_at_fp1": 0.224
+      },
+      "_n": {
+        "person": 5133,
+        "not_person": 75177
+      }
+    },
+    "pos2": {
+      "leg_heuristic": {
+        "auc": 0.7951,
+        "tp_at_fp5": 0.3394,
+        "tp_at_fp2": 0.0336,
+        "tp_at_fp1": 0.0283
+      },
+      "adaboost viejo (Spencer)": {
+        "auc": 0.6711,
+        "tp_at_fp5": 0.0982,
+        "tp_at_fp2": 0.0736,
+        "tp_at_fp1": 0.055
+      },
+      "rf viejo (Spencer)": {
+        "auc": 0.8691,
+        "tp_at_fp5": 0.4671,
+        "tp_at_fp2": 0.3962,
+        "tp_at_fp1": 0.3962
+      },
+      "adaboost desplegado (v2)": {
+        "auc": 1.0,
+        "tp_at_fp5": 1.0,
+        "tp_at_fp2": 1.0,
+        "tp_at_fp1": 1.0
+      },
+      "adaboost NUEVO": {
+        "auc": 0.9962,
+        "tp_at_fp5": 0.9869,
+        "tp_at_fp2": 0.9435,
+        "tp_at_fp1": 0.9081
+      },
+      "rf NUEVO": {
+        "auc": 0.9983,
+        "tp_at_fp5": 0.9916,
+        "tp_at_fp2": 0.9743,
+        "tp_at_fp1": 0.9647
+      },
+      "adaboost Y rf NUEVOS": {
+        "auc": 0.9986,
+        "tp_at_fp5": 0.9897,
+        "tp_at_fp2": 0.9829,
+        "tp_at_fp1": 0.9816
+      },
+      "_n": {
+        "person": 5802,
+        "not_person": 23908
+      }
+    },
+    "pos3": {
+      "leg_heuristic": {
+        "auc": 0.6828,
+        "tp_at_fp5": 0.0585,
+        "tp_at_fp2": 0.0244,
+        "tp_at_fp1": 0.0171
+      },
+      "adaboost viejo (Spencer)": {
+        "auc": 0.6501,
+        "tp_at_fp5": 0.2488,
+        "tp_at_fp2": 0.1585,
+        "tp_at_fp1": 0.1171
+      },
+      "rf viejo (Spencer)": {
+        "auc": 0.8508,
+        "tp_at_fp5": 0.5073,
+        "tp_at_fp2": 0.439,
+        "tp_at_fp1": 0.3537
+      },
+      "adaboost desplegado (v2)": {
+        "auc": 0.9985,
+        "tp_at_fp5": 0.9927,
+        "tp_at_fp2": 0.9927,
+        "tp_at_fp1": 0.9878
+      },
+      "adaboost NUEVO": {
+        "auc": 0.9973,
+        "tp_at_fp5": 0.9927,
+        "tp_at_fp2": 0.9927,
+        "tp_at_fp1": 0.9902
+      },
+      "rf NUEVO": {
+        "auc": 0.9988,
+        "tp_at_fp5": 0.9927,
+        "tp_at_fp2": 0.9927,
+        "tp_at_fp1": 0.9927
+      },
+      "adaboost Y rf NUEVOS": {
+        "auc": 0.998,
+        "tp_at_fp5": 0.9927,
+        "tp_at_fp2": 0.9927,
+        "tp_at_fp1": 0.9927
+      },
+      "_n": {
+        "person": 410,
+        "not_person": 5371
+      }
+    },
+    "pos4": {
+      "leg_heuristic": {
+        "auc": 0.6732,
+        "tp_at_fp5": 0.1367,
+        "tp_at_fp2": 0.0305,
+        "tp_at_fp1": 0.0166
+      },
+      "adaboost viejo (Spencer)": {
+        "auc": 0.5806,
+        "tp_at_fp5": 0.0803,
+        "tp_at_fp2": 0.0157,
+        "tp_at_fp1": 0.0139
+      },
+      "rf viejo (Spencer)": {
+        "auc": 0.8165,
+        "tp_at_fp5": 0.4977,
+        "tp_at_fp2": 0.4977,
+        "tp_at_fp1": 0.4275
+      },
+      "adaboost desplegado (v2)": {
+        "auc": 0.9998,
+        "tp_at_fp5": 0.9991,
+        "tp_at_fp2": 0.9963,
+        "tp_at_fp1": 0.9963
+      },
+      "adaboost NUEVO": {
+        "auc": 0.9992,
+        "tp_at_fp5": 0.9935,
+        "tp_at_fp2": 0.9908,
+        "tp_at_fp1": 0.988
+      },
+      "rf NUEVO": {
+        "auc": 1.0,
+        "tp_at_fp5": 1.0,
+        "tp_at_fp2": 1.0,
+        "tp_at_fp1": 1.0
+      },
+      "adaboost Y rf NUEVOS": {
+        "auc": 0.9996,
+        "tp_at_fp5": 0.9982,
+        "tp_at_fp2": 0.9935,
+        "tp_at_fp1": 0.9917
+      },
+      "_n": {
+        "person": 1083,
+        "not_person": 5157
+      }
+    },
+    "pos5": {
+      "leg_heuristic": {
+        "auc": 0.7067,
+        "tp_at_fp5": 0.0602,
+        "tp_at_fp2": 0.0233,
+        "tp_at_fp1": 0.0197
+      },
+      "adaboost viejo (Spencer)": {
+        "auc": 0.5529,
+        "tp_at_fp5": 0.0479,
+        "tp_at_fp2": 0.0197,
+        "tp_at_fp1": 0.0123
+      },
+      "rf viejo (Spencer)": {
+        "auc": 0.6902,
+        "tp_at_fp5": 0.3034,
+        "tp_at_fp2": 0.2396,
+        "tp_at_fp1": 0.2396
+      },
+      "adaboost desplegado (v2)": {
+        "auc": 0.9215,
+        "tp_at_fp5": 0.5356,
+        "tp_at_fp2": 0.4312,
+        "tp_at_fp1": 0.3882
+      },
+      "adaboost NUEVO": {
+        "auc": 0.9144,
+        "tp_at_fp5": 0.5061,
+        "tp_at_fp2": 0.3342,
+        "tp_at_fp1": 0.3206
+      },
+      "rf NUEVO": {
+        "auc": 0.9103,
+        "tp_at_fp5": 0.4631,
+        "tp_at_fp2": 0.3956,
+        "tp_at_fp1": 0.0
+      },
+      "adaboost Y rf NUEVOS": {
+        "auc": 0.92,
+        "tp_at_fp5": 0.516,
+        "tp_at_fp2": 0.4214,
+        "tp_at_fp1": 0.3538
+      },
+      "_n": {
+        "person": 814,
+        "not_person": 9955
+      }
+    }
+  },
+  "final_model": {
+    "model": "training_detectors/detectors/random_forest/runs/v3_2026-10-14/tiago_v3_2026-10-14.random_forest.gz",
+    "thresholds_train_set": {
+      "fp5": 0.08,
+      "fp2": 0.24,
+      "fp1": 0.46
+    }
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "dynamic_tracking — arquitectura del nodo",
+    "output": ".archify/architecture-dynamic-tracking-20261014-194414/dynamic-tracking.html",
+    "locale": "es",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "ssh://git@gitlab.iri.upc.edu:2202/mobile_robotics/moonshot_project/adaptative-navigation/dynamic-tracking.git",
+      "link_mode": "local-only",
+      "revision": "87678ef6ed0b15ee496da1df610d2a3463d3867e"
+    }
+  },
+  "components": [
+    { "id": "laser", "type": "external", "label": "Láser TIAGo", "sublabel": "/scan · 2 láseres · 360°", "pos": [40, 230], "size": [150, 64],
+      "sources": [ { "path": "config/dynamic_tracking_params.yaml", "line": 34, "label": "lidar_topic" },
+                   { "path": "dynamic_tracking/dynamic_tracking_node.py", "line": 770, "end_line": 774, "label": "suscripción /scan" } ] },
+    { "id": "tf", "type": "external", "label": "TF map/odom", "sublabel": "AMCL + odometría", "pos": [290, 60], "size": [150, 64],
+      "sources": [ { "path": "dynamic_tracking/tf_utils.py", "line": 156, "end_line": 192, "label": "extrapolación odometría" } ] },
+    { "id": "intake", "type": "backend", "label": "Entrada de scan", "sublabel": "TF del scan + extrapolación", "pos": [290, 230], "size": [150, 64],
+      "sources": [ { "path": "dynamic_tracking/dynamic_tracking_node.py", "line": 1003, "end_line": 1024, "label": "_apply_scan" },
+                   { "path": "config/dynamic_tracking_params.yaml", "line": 63, "label": "scan_tf_extrapolate_max_sec" } ] },
+    { "id": "detection", "type": "backend", "label": "Detección LiDAR", "sublabel": "piernas → AdaBoost", "tag": "cascada leg ≥ 0.65", "pos": [540, 230], "size": [150, 64],
+      "sources": [ { "path": "dynamic_tracking/lidar_detection/pipeline.py", "line": 90, "end_line": 108, "label": "_run_detectors (cascada)" },
+                   { "path": "dynamic_tracking/lidar_detection/detectors/spencer_learned.py", "line": 209, "end_line": 229, "label": "AdaBoost suma de votos" },
+                   { "path": "dynamic_tracking/lidar_detection/detectors/leg_heuristic.py", "line": 25, "end_line": 40, "label": "heurística de piernas" } ] },
+    { "id": "map", "type": "external", "label": "/map", "sublabel": "mapa estático", "pos": [790, 60], "size": [150, 64],
+      "sources": [ { "path": "dynamic_tracking/dynamic_tracking_node.py", "line": 819, "label": "suscripción /map" } ] },
+    { "id": "filters", "type": "backend", "label": "Filtros", "sublabel": "mapa · zona · par de piernas", "pos": [790, 230], "size": [150, 64],
+      "sources": [ { "path": "dynamic_tracking/dynamic_tracking_node.py", "line": 1084, "end_line": 1101, "label": "_filtered_lidar_clusters" },
+                   { "path": "dynamic_tracking/map_filters.py", "line": 226, "end_line": 270, "label": "AreaFilter + margen" },
+                   { "path": "dynamic_tracking/leg_pair.py", "line": 68, "end_line": 108, "label": "merge_leg_pairs" } ] },
+    { "id": "tracker", "type": "backend", "label": "Tracker Kalman", "sublabel": "asociación · spawn · IDs", "pos": [1040, 230], "size": [150, 64],
+      "sources": [ { "path": "dynamic_tracking/track_pipeline.py", "line": 803, "end_line": 1734, "label": "update_tracks" },
+                   { "path": "dynamic_tracking/dynamic_tracking_node.py", "line": 1202, "end_line": 1233, "label": "_lidar_tracking_tick" } ] },
+    { "id": "outputs", "type": "messagebus", "label": "/detections/tracked", "sublabel": "+ _fov · Detection2DArray", "pos": [1290, 230], "size": [150, 64],
+      "sources": [ { "path": "dynamic_tracking/dynamic_tracking_node.py", "line": 1168, "end_line": 1191, "label": "_publish_tracking_outputs" },
+                   { "path": "dynamic_tracking/dynamic_tracking_node.py", "line": 779, "end_line": 784, "label": "publishers" } ] },
+    { "id": "vlm", "type": "external", "label": "vlm_hri_node", "sublabel": "consume tracked_fov", "pos": [1540, 230], "size": [150, 64],
+      "sources": [ { "path": "dynamic_tracking/dynamic_tracking_node.py", "line": 781, "end_line": 784, "label": "consumidor previsto" } ] },
+    { "id": "training", "type": "backend", "label": "training_detectors", "sublabel": "grabar → train.py", "pos": [290, 400], "size": [150, 64],
+      "sources": [ { "path": "training_detectors/scripts/record_session.py", "line": 100, "end_line": 149, "label": "grabación" },
+                   { "path": "training_detectors/scripts/train.py", "line": 205, "end_line": 226, "label": "entrenamiento" } ] },
+    { "id": "model", "type": "database", "label": "Modelo AdaBoost v3", "sublabel": "models/spencer_adaboost", "tag": "umbral −1.01", "pos": [540, 400], "size": [150, 64],
+      "sources": [ { "path": "config/dynamic_tracking_params.yaml", "line": 132, "end_line": 134, "label": "modelo y umbral" } ] },
+    { "id": "camera", "type": "external", "label": "Cámara cabeza", "sublabel": "/head_front_camera/color", "pos": [790, 400], "size": [150, 64],
+      "sources": [ { "path": "config/dynamic_tracking_params.yaml", "line": 31, "label": "image_topic" } ] },
+    { "id": "yolo", "type": "backend", "label": "YOLO (hilo GPU)", "sublabel": "yolo26n · confirma persona", "pos": [1040, 400], "size": [150, 64],
+      "sources": [ { "path": "dynamic_tracking/dynamic_tracking_node.py", "line": 898, "end_line": 914, "label": "worker YOLO" },
+                   { "path": "dynamic_tracking/dynamic_tracking_node.py", "line": 1887, "end_line": 1910, "label": "_yolo_auxiliary" } ] },
+    { "id": "rviz", "type": "frontend", "label": "RViz", "sublabel": "cajas suavizadas", "pos": [1290, 400], "size": [150, 64],
+      "sources": [ { "path": "dynamic_tracking/dynamic_tracking_node.py", "line": 785, "label": "/dynamic_tracks_markers" },
+                   { "path": "dynamic_tracking/dynamic_tracking_node.py", "line": 1193, "end_line": 1200, "label": "suavizado visual" } ] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "dynamic_tracking_node · 15 Hz", "wraps": ["intake", "detection", "filters", "tracker"] }
+  ],
+  "connections": [
+    { "id": "scan-in", "from": "laser", "to": "intake", "label": "LaserScan", "variant": "emphasis" },
+    { "id": "tf-in", "from": "tf", "to": "intake", "label": "pose robot" },
+    { "id": "to-detection", "from": "intake", "to": "detection", "label": "pts en map", "variant": "emphasis" },
+    { "id": "model-load", "from": "model", "to": "detection", "label": "carga" },
+    { "id": "train-model", "from": "training", "to": "model", "label": "entrena", "variant": "dashed" },
+    { "id": "to-filters", "from": "detection", "to": "filters", "label": "piernas", "variant": "emphasis" },
+    { "id": "map-in", "from": "map", "to": "filters", "label": "obstáculos" },
+    { "id": "to-tracker", "from": "filters", "to": "tracker", "label": "mediciones", "variant": "emphasis" },
+    { "id": "camera-in", "from": "camera", "to": "yolo", "label": "Image" },
+    { "id": "yolo-confirm", "from": "yolo", "to": "tracker", "label": "bbox persona", "variant": "dashed" },
+    { "id": "publish", "from": "tracker", "to": "outputs", "label": "cada scan", "variant": "emphasis" },
+    { "id": "consume", "from": "outputs", "to": "vlm", "label": "tracked_fov" },
+    { "id": "markers", "from": "tracker", "to": "rviz", "label": "markers" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Ruta principal (cada /scan)", "items": ["TF del instante del scan; si la odometría llega tarde (~65 ms), se extrapola", "Heurística de piernas (~3 ms) y AdaBoost solo si leg ≥ 0.65", "Filtros: mapa estático, zona (+0.5 m de margen) y fusión de las dos piernas", "Kalman + asociación; un ID nace tras 5 frames confirmados"] },
+    { "dot": "emerald", "title": "Rendimiento medido", "items": ["15 Hz (todos los scans del láser)", "Detección ~13 ms/scan; tracking ~2 ms", "Latencia scan → /detections/tracked ~95 ms"] },
+    { "dot": "violet", "title": "Detectores", "items": ["AdaBoost v3 reentrenado con datos del TIAGo (láser a 21 cm)", "RF reentrenado disponible, no activo: no mejora al AdaBoost", "Se entrenan offline con training_detectors/"] }
+  ]
+}

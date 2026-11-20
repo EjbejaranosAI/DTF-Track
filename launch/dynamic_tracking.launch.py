@@ -61,6 +61,12 @@ def _launch_setup(context, *args, **kwargs):
             "1",
             "yes",
         )
+    reid_enable = LaunchConfiguration("enable_reid").perform(context).strip()
+    if reid_enable.lower() not in ("", "auto"):
+        node_params["enable_reid"] = reid_enable.lower() in ("true", "1", "yes")
+    zones_file = LaunchConfiguration("area_filter_zones_file").perform(context).strip()
+    if zones_file:
+        node_params["area_filter_zones_file"] = "" if zones_file.lower() == "none" else zones_file
     area_zones = LaunchConfiguration("area_filter_zones_json").perform(context).strip()
     if area_zones:
         node_params["area_filter_zones_json"] = area_zones
@@ -199,6 +205,11 @@ def generate_launch_description():
                 description="best_effort o reliable; vacio = YAML. Si WARN QoS RELIABILITY, prueba el otro valor.",
             ),
             DeclareLaunchArgument(
+                "enable_reid",
+                default_value="auto",
+                description="Re-ID OSNet (recupera IDs por apariencia): true|false|auto (auto = YAML).",
+            ),
+            DeclareLaunchArgument(
                 "area_filter_enable",
                 default_value="auto",
                 description="true/false o auto (usa el YAML segun profile)",
@@ -207,6 +218,12 @@ def generate_launch_description():
                 "lidar_spawn_require_all_detectors",
                 default_value="auto",
                 description="true = RF+AdaBoost+leg para abrir ID; false/auto = YAML (require_two)",
+            ),
+            DeclareLaunchArgument(
+                "area_filter_zones_file",
+                default_value="",
+                description="Zonas desde archivo: nombre en config/zones/ (p.ej. lab_perimeter, "
+                "lab_rectangle) o ruta a un .yaml; vacio = YAML; none = desactivar archivo",
             ),
             DeclareLaunchArgument(
                 "area_filter_zones_json",

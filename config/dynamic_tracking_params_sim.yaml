@@ -71,6 +71,7 @@ dynamic_tracking_node:
     max_occlusions_before_deletion: 20
     max_occlusions_mature_track: 40
     lidar_initiation_max_age_static_sec: 8.0
+    lidar_initiation_static_min_travel_m: 0.5
     require_visual_confirmation: false
     enable_image_only_assoc_fallback: true
     image_only_assoc_min_iou: 0.18
@@ -185,6 +186,7 @@ dynamic_tracking_node:
     area_filter_x_max: 1.0
     area_filter_y_min: -2.0
     area_filter_y_max: 2.0
+    area_filter_zones_file: ""
     area_filter_zones_json: "[]"
 
     # --- YOLO auxiliar (solo metadata, no mueve Kalman) ---

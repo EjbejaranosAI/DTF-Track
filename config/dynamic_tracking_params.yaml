@@ -11,16 +11,40 @@ dynamic_tracking_node:
     yolo_onnx_intra_op_threads: 2
     yolo_onnx_inter_op_threads: 1
     device: "cuda:0"
+    # 0.40 con imgsz 640 (probado en vivo; 0.35 daba alguna deteccion de mas). Con 640 se recuperan personas lejanas/parciales.
     confidence_threshold: 0.40
-    yolo_imgsz: 256
+    # 640 = resolucion nativa de la camara. Con 256 se perdian personas lejanas o parciales
+    # (3 personas: 9/127 frames completos con 256 vs 78/127 con 640). GPU: ~6.5 -> ~7.5 ms/frame.
+    yolo_imgsz: 640
     yolo_half: false
     yolo_max_det: 7
-    yolo_frame_stride: 3
+    yolo_frame_stride: 1
     yolo_keep_latest_frame_only: true
+
+    # ── Re-ID por apariencia (OSNet x0_25, misma GPU que YOLO) ──
+    # Cada track person guarda embeddings de sus crops YOLO; cuando muere, pasa a una galeria.
+    # Un track nuevo que coincide con un id muerto hereda ese id (y su nombre si se registro).
+    # Registro: ros2 topic pub --once /dynamic_tracking/reid/enroll std_msgs/String "data: '3:Edison'"
+    # Estado:   /dynamic_tracking/reid/identities (JSON)
+    enable_reid: false
+    reid_model: "osnet_x0_25"
+    reid_weights: "osnet_x0_25_msmt17.pth"   # relativo a share/dynamic_tracking/models/reid
+    reid_rate_hz: 2.0                 # embeddings por segundo (todas las personas en un lote)
+    reid_match_threshold: 0.75        # coseno minimo contra la galeria (misma persona en vivo: 0.88-0.97)
+    reid_match_margin: 0.05           # ventaja minima sobre el 2o candidato (de otra persona)
+    reid_half: false                  # OSNet en fp16: medido igual que fp32 (6-7 ms, 2 personas), no compensa
+    reid_duplicate_threshold: 0.8     # entradas de galeria con centroides mas parecidos = misma persona
+    reid_confirm_hits: 2              # coincidencias seguidas antes de restaurar el id (entre umbral y strong)
+    reid_strong_threshold: 0.85       # con una sola muestra por encima de esto se restaura al momento
+    reid_rate_pending_hz: 4.0         # embeddings/s mientras algun track decide (2 Hz el resto del tiempo)
+    reid_max_samples_to_match: 20     # tras N muestras el track deja de buscar (ya es suyo)
+    reid_lost_ttl_sec: 300.0          # ids muertos sin nombre se olvidan tras este tiempo
+    reid_skip_overlap_iou: 0.3        # cajas person solapadas no generan embedding
+    reid_gallery_file: "~/.ros/dynamic_tracking_reid_gallery.json"   # nombres persistentes ("" = no guardar)
     yolo_cpu_num_threads: 2
     target_classes: ["person"]
     publish_annotated_image: true
-    publish_compressed_image: false
+    publish_compressed_image: true    # /image_annotated/compressed (JPEG): para ver la imagen desde otro PC por WiFi
     jpeg_quality: 70
     # DOT + YOLO crops for pose_estimation (requires pose_estimation_interfaces)
     publish_dot_yolo_crops: false
@@ -54,7 +78,16 @@ dynamic_tracking_node:
     camera_horizontal_fov_deg: 69.4
     lidar_angular_window_deg: 20.0
     lidar_fusion_angle_offset_deg: 0.0
-    tf_lookup_timeout_sec: 0.05
+    # La TF map->laser llega ~66 ms despues del /scan: esperar 50 ms casi nunca la encuentra y acaba usando
+    # la ultima TF igual (fallback en tf_utils). 0 = sin espera: rclpy redondea cualquier espera a ~20 ms, y si la
+    # cadena no existe (p.ej. sin TF de torso/cabeza) cada lookup bloqueaba 20-250 ms con el lock de tracks cogido.
+    tf_lookup_timeout_sec: 0.0
+    # La TF de odometria (odom->base_footprint) llega ~65 ms despues del /scan: extrapolarla con la velocidad
+    # de la propia TF hasta el stamp del scan (corrige el giro del robot en ese hueco). 0 = sin corregir.
+    scan_tf_extrapolate_max_sec: 0.15
+    # Une las dos piernas de una persona en una medicion (punto medio). Datos TIAGo: piernas de una
+    # persona 0.16-0.57 m (100% <= 0.6). Emparejado de mas cercano a mas lejano. 0 = desactivado.
+    leg_pair_merge_max_sep_m: 0.6
 
     # --- Tracking frame / Kalman ---
     tracking_frame: "map"
@@ -69,7 +102,8 @@ dynamic_tracking_node:
     # Asociacion: subir umbral = mas tolerante (menos parpadeo); bajar = menos swaps pero mas perdidas.
     tracking_person_lidar_assoc_cost_threshold: 1.45
     tracking_max_missed_frames: 25
-    tracking_person_max_missed_frames: 90
+    # ~14 frames/s; tracks maduros (vistos por YOLO) aguantan x1.5 -> 45 = ~4.8 s (antes 90 = ~10 s de caja congelada)
+    tracking_person_max_missed_frames: 45
     person_lidar_only_max_missed_frames: 24
     person_missed_debounce_frames: 2
     person_lidar_max_correction_jump_m: 0.95   # rechaza correct() si salto > umbral (m)
@@ -79,7 +113,10 @@ dynamic_tracking_node:
     person_hold_skip_lidar_association_sec: 0.0
     max_occlusions_before_deletion: 20
     max_occlusions_mature_track: 40
+    # 3 s mataba IDs reales cuando la persona frena (sin TF de cabeza YOLO no confirma ningun track). Fantasmas: AdaBoost.
     lidar_initiation_max_age_static_sec: 8.0
+    # ...salvo si el track ya se alejo > 0.5 m de donde nacio (persona quieta, no mueble). 2026-10-28.
+    lidar_initiation_static_min_travel_m: 0.5
     require_visual_confirmation: false
     enable_image_only_assoc_fallback: true
     image_only_assoc_min_iou: 0.18
@@ -102,26 +139,39 @@ dynamic_tracking_node:
     lidar_cluster_jump_m: 0.28
     lidar_cluster_pose_mode: "median"
     lidar_min_points_per_segment: 3
+    # 50 descartaba piernas a <0.4 m (una pierna ocupa ~56 beams de 0.33 deg a 0.37 m). 2026-10-28.
     lidar_max_points_per_segment: 50
+    # El /scan virtual del TIAGo alterna beams persona/fondo al lado del robot (0.38 0.77 0.37 5.97 ...)
+    # y la segmentacion rompia a la persona en trozos de 1-3 puntos -> cambio de ID al pasar pegado.
+    # Rellena un beam con el rango mas cercano en +-half_window si es < max_range y mas cercano > jump.
+    lidar_interleave_repair_half_window: 0   # 0 = off; con 3 empeoro (13 IDs en replay), pendiente
+    lidar_interleave_repair_max_range_m: 1.5
     lidar_min_segment_width_m: 0.0
 
     # Detectores + fusion (require_two = RF+AdaBoost o heurística piernas)
-    lidar_detectors_enabled: ["spencer_rf", "spencer_adaboost", "leg_heuristic"]
+    # RF viejo fuera: nunca vota en el TIAGo (ver training_detectors/detectors/random_forest/README.md) y costaba ~28 ms/scan
+    lidar_detectors_enabled: ["spencer_adaboost", "leg_heuristic"]
+    # Cascada: piernas (~3 ms) primero; AdaBoost (features Spencer, caro) solo si leg >= este valor.
+    # = leg_heuristic_detector_min_score -> mismo resultado con require_two, mucho mas rapido. 0 = sin cascada.
+    lidar_cascade_min_leg_score: 0.65
     lidar_fusion_policy: "require_two"
     lidar_fusion_any_high_threshold: 0.70
     spencer_rf_model_path: "models/spencer_rf/lms500_0.25deg_height70cm_fr_rathausgasse_noetic.random_forest.gz"
     spencer_rf_decision_threshold: 0.59
     spencer_rf_only_positive_classifications: false
     spencer_rf_postfilter_min_confidence: 0.0
-    spencer_adaboost_model_path: "models/spencer_adaboost/lms500_0.25deg_height70cm_rathausgasse.adaboost"
-    spencer_adaboost_decision_threshold: -10.5
+    # Reentrenado con datos TIAGo (laser a 21 cm), ver training_detectors/detectors/adaboost/. Anterior: tiago_height21cm_v2.adaboost (umbral -1.65)
+    spencer_adaboost_model_path: "models/spencer_adaboost/tiago_v3_2026-10-14.adaboost"
+    # Umbral sobre la suma de votos (DTREES_PREDICT_SUM): -1.01 ~ 5% falsos positivos en el set de entrenamiento (run v3_2026-10-14)
+    spencer_adaboost_decision_threshold: -1.01
     leg_candidate_enable: true
     leg_min_span_deg: 2.5
     leg_max_span_deg: 24.0
     leg_max_range_spread_ratio: 0.15
     leg_min_chord_m: 0.09
     leg_max_chord_m: 0.50
-    leg_heuristic_detector_min_score: 0.54
+    # Umbral efectivo de spawn/mantenimiento: AdaBoost siempre vota persona (bug), asi que require_two = leg_heuristic. Medido 2026-10-14: 0.65 -> persona 54% / fondo 35% por segmento.
+    leg_heuristic_detector_min_score: 0.65
     leg_hypothesis_min_score: 0.65
     spawn_unknown_from_lidar: false
     leg_hypothesis_as_person: true
@@ -131,10 +181,11 @@ dynamic_tracking_node:
     # true = RF + AdaBoost + leg_heuristic deben coincidir para abrir ID (fusion unanimous)
     lidar_spawn_require_all_detectors: false
     lidar_spawn_fusion_policy: "require_two"
-    lidar_maintenance_fusion_policy: "max_score"
+    # max_score siempre daba 1.0 (AdaBoost); require_two = solo clusters con forma de pierna mantienen tracks
+    lidar_maintenance_fusion_policy: "require_two"
     lidar_maintenance_min_leg_score: 0.58
-    lidar_spawn_person_min_leg_score: 0.55
-    lidar_spawn_confirm_frames: 2
+    lidar_spawn_person_min_leg_score: 0.65
+    lidar_spawn_confirm_frames: 5
     lidar_spawn_confirm_radius_m: 0.40
     lidar_spawn_same_frame_dedup_m: 0.45
     person_lidar_spawn_suppress_radius_m: 0.55
@@ -191,16 +242,22 @@ dynamic_tracking_node:
     static_map_keep_cluster_if_tf_fails: false
     reject_lidar_rgb_fusion_on_static_map: true
 
-    # ROI map: x=[2,9], y=[-5,2]
+    # ROI map: x=[1.0,8.5], y=[-3.3,1.3]; y recortada para excluir sillas/mesas en (2.9,1.8) y (6.5,-3.7); x_min ampliado para grabar datos detras del robot
     area_filter_enable: true
     area_filter_frame: "map"
     area_filter_publish_markers: true
     detection_area_marker_topic: "/detection_area_markers"
-    area_filter_x_min: 2.0
-    area_filter_x_max: 9.0
-    area_filter_y_min: -5.0
-    area_filter_y_max: 2.0
+    area_filter_x_min: 1.0
+    area_filter_x_max: 8.5
+    area_filter_y_min: -3.3
+    area_filter_y_max: 1.3
+    # Archivo de zonas en config/zones/ (nombre o ruta). Si esta puesto, manda sobre
+    # area_filter_zones_json y el rectangulo x_min/x_max/y_min/y_max de arriba.
+    # lab_perimeter = poligono clicado en RViz (2026-10-28); lab_rectangle = el rectangulo de arriba.
+    area_filter_zones_file: "lab_perimeter"
     area_filter_zones_json: "[]"
+    # Histeresis: IDs solo nacen dentro de la zona, pero un track se mantiene hasta salir > margen (no se rompe en el borde)
+    area_filter_track_margin_m: 0.5
 
     # --- YOLO auxiliar (solo metadata, no mueve Kalman) ---
     yolo_visual_lidar_parity: true
@@ -233,6 +290,10 @@ dynamic_tracking_node:
 
     # --- RViz markers ---
     marker_topic: "/dynamic_tracks_markers"
+    # Suavizado SOLO visual de la caja en RViz (EMA, constante de tiempo en s; el tracking no cambia).
+    # 0.2 s: tirones p95 39 -> 9 m/s2, ~11 cm de retraso. Salto > snap_m (reasociacion) = sin suavizar.
+    marker_position_smoothing_tau_sec: 0.2
+    marker_position_smoothing_snap_m: 1.0
     marker_visualization_frame: ""
     marker_remap_prefer_latest_tf: false
     marker_remap_try_image_stamp_fallback: true
@@ -298,7 +359,7 @@ dynamic_tracking_node:
 
     # --- Debug / logs ---
     log_verbose_startup: false
-    log_pipeline_timing_sec: 0.0
+    log_pipeline_timing_sec: 5.0
     log_person_tracks_sec: 2.0
     log_lidar_diag_sec: 0.0
     log_spencer_extract_diag_sec: 0.0

@@ -221,10 +221,9 @@ class OnnxYoloBackend(YoloInferenceBackend):
             import onnxruntime as ort
         except ImportError as exc:
             raise ImportError(
-                "yolo_backend:=onnx requiere onnxruntime. En el TIAGO:\n"
-                "  source ~/iri-lab/virtualenv/perception_env/bin/activate\n"
+                "yolo_backend:=onnx needs onnxruntime. Install it in your venv:\n"
                 "  pip install onnxruntime\n"
-                "  export PYTHONPATH=.../perception_env/lib/python3.10/site-packages:$PYTHONPATH"
+                "  export PYTHONPATH=<venv>/lib/python3.X/site-packages:$PYTHONPATH"
             ) from exc
 
         opts = ort.SessionOptions()

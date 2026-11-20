@@ -1,0 +1,155 @@
+# Reference manifest of the TIAGo Pro dataset used to train tiago_v3_2026-10-14
+# (13 sessions, 6 groups). The .pkl recordings are not in the repository: this file
+# only documents the recording protocol. Your own sessions go to data/sessions.yaml,
+# which record_session.py creates on the first recording.
+zone:
+  x_min: 1.0
+  x_max: 8.5
+  y_min: -3.3
+  y_max: 1.3
+sessions:
+- name: v2/s1_walk2p_pos2
+  label: zone
+  group: pos2
+  scans: 1383
+  segments: 48846
+  robot_moved_m: 0.0
+  robot_turned_deg: 0.0
+  recorded: '2026-10-14'
+  notes: 2 people walking in the zone
+- name: v2/s2_empty_pos2
+  label: empty
+  group: pos2
+  scans: 758
+  segments: 23908
+  robot_moved_m: 0.0
+  robot_turned_deg: 0.0
+  recorded: '2026-10-14'
+  notes: empty room
+- name: v2/s3_walk_pos1
+  label: zone
+  group: pos1
+  scans: 1197
+  segments: 38683
+  robot_moved_m: 0.01
+  robot_turned_deg: 0.1
+  recorded: '2026-10-14'
+  notes: 1 person in the zone
+- name: v2/s4_empty_pos1
+  label: empty
+  group: pos1
+  scans: 598
+  segments: 17709
+  robot_moved_m: 0.0
+  robot_turned_deg: 0.0
+  recorded: '2026-10-14'
+  notes: empty room
+- name: v2/s5_walk_free_pos1
+  label: background
+  group: pos1
+  scans: 1150
+  segments: 40638
+  robot_moved_m: 0.03
+  robot_turned_deg: 0.3
+  recorded: '2026-10-14'
+  notes: 1 person all over the room, next to furniture
+  background:
+  - v2/s4_empty_pos1
+  - v2/s6_empty_pos1b
+- name: v2/s6_empty_pos1b
+  label: empty
+  group: pos1
+  scans: 559
+  segments: 19210
+  robot_moved_m: 0.0
+  robot_turned_deg: 0.0
+  recorded: '2026-10-14'
+  notes: empty room (background for s5)
+- name: v3/s1_walk_moving
+  label: zone
+  group: moving
+  scans: 1032
+  segments: 43665
+  robot_moved_m: 14.83
+  robot_turned_deg: 2016.9
+  recorded: 2026-10-14 18:40
+  notes: '1 person walking in the zone, robot moving and turning, no cable |
+    poor localization in part of the session: train.py only uses scans that agree
+    with the map (--min-map-agreement)'
+- name: v3/s2_empty_moving
+  label: zone_empty
+  group: moving
+  scans: 599
+  segments: 22385
+  robot_moved_m: 10.11
+  robot_turned_deg: 1580.6
+  recorded: 2026-10-14 18:43
+  notes: 'empty zone, robot moving and turning, operator outside the zone, no cable
+    | poor localization in part of the session: train.py only uses scans that agree
+    with the map (--min-map-agreement)'
+- name: v3/s3_empty_moving
+  label: zone_empty
+  group: moving
+  scans: 634
+  segments: 20967
+  robot_moved_m: 3.73
+  robot_turned_deg: 883.5
+  recorded: 2026-10-14 18:51
+  notes: 'empty zone, robot moving gently after relocalizing, operator outside the
+    zone, no cable | poor localization in part of the session: train.py only uses
+    scans that agree with the map (--min-map-agreement)'
+- name: v3/s5_empty_pos3
+  label: zone_empty
+  group: pos3
+  scans: 295
+  segments: 10416
+  robot_moved_m: 0.6
+  robot_turned_deg: 34.0
+  recorded: 2026-10-14 18:59
+  notes: empty zone; robot from (3.04,-1.71) -3 deg, moved a bit by hand (0.6 m,
+    34 deg); zone 0.0 seg/scan the whole time
+- name: v3/s6_walk_pos3
+  label: zone
+  group: pos3
+  scans: 389
+  segments: 15231
+  robot_moved_m: 0.56
+  robot_turned_deg: 149.9
+  recorded: 2026-10-14 19:01
+  notes: 1 person walking in the zone, robot near (3.0,-1.7), small movements
+- name: v3/s7_empty_pos4
+  label: zone_empty
+  group: pos4
+  scans: 293
+  segments: 11235
+  robot_moved_m: 0.35
+  robot_turned_deg: 68.4
+  recorded: 2026-10-14 19:03
+  notes: empty zone, pose 4
+- name: v3/s8_walk_pos4
+  label: zone
+  group: pos4
+  scans: 551
+  segments: 21713
+  robot_moved_m: 0.41
+  robot_turned_deg: 153.8
+  recorded: 2026-10-14 19:05
+  notes: 1 person walking in the zone, pose 4 (3.47,-1.49) -102 deg
+- name: v3/s9_empty_pos5
+  label: zone_empty
+  group: pos5
+  scans: 240
+  segments: 12520
+  robot_moved_m: 0.48
+  robot_turned_deg: 1.5
+  recorded: 2026-10-14 19:10
+  notes: empty zone, pose 5 (6.69,-0.28) -1 deg, robot still
+- name: v3/s10_walk_pos5
+  label: zone
+  group: pos5
+  scans: 475
+  segments: 23003
+  robot_moved_m: 0.0
+  robot_turned_deg: 0.0
+  recorded: 2026-10-14 19:11
+  notes: 1 person walking in the zone, pose 5 (6.69,-0.28) -1 deg, robot still

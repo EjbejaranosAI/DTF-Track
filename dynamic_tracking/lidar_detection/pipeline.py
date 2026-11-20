@@ -71,8 +71,10 @@ class LidarDetectionPipeline:
         min_points: int,
         max_points: int,
         min_segment_width_m: float,
+        cascade_min_leg_score: float = 0.0,
     ) -> None:
         self._detectors = [d for d in detectors if d.is_ready]
+        self._cascade_min_leg = float(cascade_min_leg_score)
         self._fusion = fusion
         self._fusion_spawn = fusion_spawn
         self._fusion_maint = fusion_maintenance
@@ -84,6 +86,25 @@ class LidarDetectionPipeline:
         self._min_pts = min_points
         self._max_pts = max_points
         self._min_width = min_segment_width_m
+
+    def _run_detectors(self, contexts: List[SegmentContext]) -> List[LidarHypothesis]:
+        """Run all detectors; with a cascade gate, the cheap leg heuristic runs first and
+        the learned (Spencer) detectors only see segments whose leg score passes it."""
+        leg = [d for d in self._detectors if d.detector_id == "leg_heuristic"]
+        if self._cascade_min_leg <= 0.0 or not leg:
+            hyps: List[LidarHypothesis] = []
+            for det in self._detectors:
+                hyps.extend(det.detect(contexts))
+            return hyps
+        hyps = []
+        for det in leg:
+            hyps.extend(det.detect(contexts))
+        passed = {h.segment_index for h in hyps if h.score >= self._cascade_min_leg}
+        gated = [c for c in contexts if c.segment_index in passed]
+        for det in self._detectors:
+            if det.detector_id != "leg_heuristic" and gated:
+                hyps.extend(det.detect(gated))
+        return hyps
 
     @property
     def enabled_detector_ids(self) -> List[str]:
@@ -200,9 +221,7 @@ class LidarDetectionPipeline:
                 )
             )
 
-        all_hyps: List[LidarHypothesis] = []
-        for det in self._detectors:
-            all_hyps.extend(det.detect(contexts))
+        all_hyps = self._run_detectors(contexts)
 
         if debug_stats is not None:
             self._update_debug_from_hypotheses(debug_stats, all_hyps)
@@ -304,9 +323,7 @@ class LidarDetectionPipeline:
                 )
             )
 
-        all_hyps: List[LidarHypothesis] = []
-        for det in self._detectors:
-            all_hyps.extend(det.detect(contexts))
+        all_hyps = self._run_detectors(contexts)
 
         if debug_stats is not None:
             self._update_debug_from_hypotheses(debug_stats, all_hyps)
@@ -407,6 +424,7 @@ def build_lidar_pipeline(
     adaboost_model_path: str,
     adaboost_threshold: float,
     blob_params: BlobDetectorParams,
+    cascade_min_leg_score: float = 0.0,
 ) -> LidarDetectionPipeline:
     fusion_spawn_cfg = None
     fusion_maint_cfg = None
@@ -464,6 +482,7 @@ def build_lidar_pipeline(
         min_points=min_points,
         max_points=max_points,
         min_segment_width_m=min_segment_width_m,
+        cascade_min_leg_score=cascade_min_leg_score,
     )
 
 

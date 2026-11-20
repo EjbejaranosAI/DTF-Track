@@ -409,7 +409,7 @@ def build_track_marker_array(
         ):
             continue
 
-        map_x, map_y = tr.state()
+        map_x, map_y = tr.display_position()
         vx, vy = tr.velocity()
         speed = math.sqrt(vx * vx + vy * vy)
 
@@ -551,6 +551,8 @@ def build_track_marker_array(
             yolo_visual_lidar_parity=yolo_visual_lidar_parity,
             person_yolo_seen_green_sec=person_yolo_seen_green_sec,
         )
+        if getattr(tr, "reid_name", None):
+            text.text += f" ({tr.reid_name})"
         text.lifetime = lt_msg
         marker_arr.markers.append(text)
 
@@ -751,18 +753,58 @@ def build_lidar_cluster_marker_array(
     return arr
 
 
+def _triangulate_polygon(poly: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+    """Ear clipping for a simple (possibly concave) polygon -> flat list of triangle vertices."""
+    pts = list(poly)
+    area2 = sum(
+        pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1]
+        for i in range(len(pts))
+    )
+    if area2 < 0.0:
+        pts.reverse()  # make it counter-clockwise
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    tris: List[Tuple[float, float]] = []
+    idx = list(range(len(pts)))
+    guard = 0
+    while len(idx) > 3 and guard < 10000:
+        guard += 1
+        n = len(idx)
+        for k in range(n):
+            a, b, c = pts[idx[k - 1]], pts[idx[k]], pts[idx[(k + 1) % n]]
+            if cross(a, b, c) <= 0.0:
+                continue  # reflex vertex
+            if any(
+                cross(a, b, pts[j]) > 0.0 and cross(b, c, pts[j]) > 0.0 and cross(c, a, pts[j]) > 0.0
+                for j in idx if pts[j] not in (a, b, c)
+            ):
+                continue
+            tris.extend((a, b, c))
+            idx.pop(k)
+            break
+        else:
+            break  # degenerate polygon: draw what we have
+    if len(idx) == 3:
+        tris.extend(pts[j] for j in idx)
+    return tris
+
+
 def build_area_zone_marker_array(
     zones: List[dict],
     area_frame: str,
     stamp,
 ) -> MarkerArray:
-    """Flat ROI on the floor (magenta fill + border), Spencer-style."""
+    """Flat ROI on the floor (magenta fill + border), Spencer-style. Rectangles or polygons."""
     arr = MarkerArray()
     for i, z in enumerate(zones):
-        x_min, x_max = float(z["x_min"]), float(z["x_max"])
-        y_min, y_max = float(z["y_min"]), float(z["y_max"])
-        cx = (x_min + x_max) * 0.5
-        cy = (y_min + y_max) * 0.5
+        if "polygon" in z:
+            outline = [(float(x), float(y)) for x, y in z["polygon"]]
+        else:
+            x_min, x_max = float(z["x_min"]), float(z["x_max"])
+            y_min, y_max = float(z["y_min"]), float(z["y_max"])
+            outline = [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]
         is_add = bool(z.get("add", True))
 
         fill = Marker()
@@ -770,20 +812,20 @@ def build_area_zone_marker_array(
         fill.header.frame_id = area_frame
         fill.ns = "detection_area"
         fill.id = i
-        fill.type = Marker.CUBE
+        fill.type = Marker.TRIANGLE_LIST
         fill.action = Marker.ADD
-        fill.pose.position.x = cx
-        fill.pose.position.y = cy
-        fill.pose.position.z = 0.025 if is_add else 0.035
         fill.pose.orientation.w = 1.0
-        fill.scale.x = abs(x_max - x_min)
-        fill.scale.y = abs(y_max - y_min)
-        fill.scale.z = 0.05
+        fill.scale.x = fill.scale.y = fill.scale.z = 1.0
         if is_add:
             fill.color.r, fill.color.g, fill.color.b, fill.color.a = 0.82, 0.18, 0.82, 0.42
         else:
             fill.color.r, fill.color.g, fill.color.b, fill.color.a = 1.0, 0.15, 0.15, 0.35
         fill.lifetime = marker_lifetime_msg(0.0)
+        z_fill = 0.025 if is_add else 0.035
+        for px, py in _triangulate_polygon(outline):
+            pt = Point()
+            pt.x, pt.y, pt.z = px, py, z_fill
+            fill.points.append(pt)
         arr.markers.append(fill)
 
         border = Marker()
@@ -801,71 +843,10 @@ def build_area_zone_marker_array(
             border.color.r, border.color.g, border.color.b, border.color.a = 1.0, 0.2, 0.2, 0.95
         border.lifetime = marker_lifetime_msg(0.0)
         z_line = 0.04 if is_add else 0.05
-        for px, py in (
-            (x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max), (x_min, y_min),
-        ):
+        for px, py in outline + outline[:1]:
             pt = Point()
             pt.x, pt.y, pt.z = px, py, z_line
             border.points.append(pt)
         arr.markers.append(border)
     return arr
 
-
-def build_area_zone_marker_array(
-    zones: List[dict],
-    area_frame: str,
-    stamp,
-) -> MarkerArray:
-    """Flat ROI on the floor (magenta fill + border), Spencer-style."""
-    arr = MarkerArray()
-    for i, z in enumerate(zones):
-        x_min, x_max = float(z["x_min"]), float(z["x_max"])
-        y_min, y_max = float(z["y_min"]), float(z["y_max"])
-        cx = (x_min + x_max) * 0.5
-        cy = (y_min + y_max) * 0.5
-        is_add = bool(z.get("add", True))
-
-        fill = Marker()
-        fill.header.stamp = stamp
-        fill.header.frame_id = area_frame
-        fill.ns = "detection_area"
-        fill.id = i
-        fill.type = Marker.CUBE
-        fill.action = Marker.ADD
-        fill.pose.position.x = cx
-        fill.pose.position.y = cy
-        fill.pose.position.z = 0.025 if is_add else 0.035
-        fill.pose.orientation.w = 1.0
-        fill.scale.x = abs(x_max - x_min)
-        fill.scale.y = abs(y_max - y_min)
-        fill.scale.z = 0.05
-        if is_add:
-            fill.color.r, fill.color.g, fill.color.b, fill.color.a = 0.82, 0.18, 0.82, 0.42
-        else:
-            fill.color.r, fill.color.g, fill.color.b, fill.color.a = 1.0, 0.15, 0.15, 0.35
-        fill.lifetime = marker_lifetime_msg(0.0)
-        arr.markers.append(fill)
-
-        border = Marker()
-        border.header.stamp = stamp
-        border.header.frame_id = area_frame
-        border.ns = "detection_area_border"
-        border.id = i
-        border.type = Marker.LINE_STRIP
-        border.action = Marker.ADD
-        border.pose.orientation.w = 1.0
-        border.scale.x = 0.08
-        if is_add:
-            border.color.r, border.color.g, border.color.b, border.color.a = 0.95, 0.25, 0.95, 0.95
-        else:
-            border.color.r, border.color.g, border.color.b, border.color.a = 1.0, 0.2, 0.2, 0.95
-        border.lifetime = marker_lifetime_msg(0.0)
-        z_line = 0.04 if is_add else 0.05
-        for px, py in (
-            (x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max), (x_min, y_min),
-        ):
-            pt = Point()
-            pt.x, pt.y, pt.z = px, py, z_line
-            border.points.append(pt)
-        arr.markers.append(border)
-    return arr

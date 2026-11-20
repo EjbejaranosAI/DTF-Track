@@ -153,6 +153,44 @@ class TFHelper:
             return val
         return None
     
+    def lookup_planar_extrapolated(
+        self, target: str, source: str, stamp, max_extrap_sec: float, window_sec: float = 0.1,
+    ) -> Optional[Tuple[float, float, float]]:
+        """(tx, ty, yaw) at ``stamp`` when the TF chain lags behind it.
+
+        On the TIAGo the odometry TF (odom -> base_footprint) arrives ~65 ms after the
+        /scan, so the stamped lookup fails and ``latest`` is off by the robot motion in
+        that gap (~6.6 deg at 100 deg/s). Extrapolate the latest transform with the
+        velocity seen over the previous ``window_sec`` (taken from the TF buffer, i.e.
+        the odometry itself). None if the gap is larger than ``max_extrap_sec``.
+        """
+        from builtin_interfaces.msg import Time as BuiltinTime
+
+        t1 = self._raw_lookup(target, source, Time())
+        if t1 is None:
+            return None
+        s1 = float(t1.header.stamp.sec) + float(t1.header.stamp.nanosec) * 1e-9
+        s = float(stamp.sec) + float(stamp.nanosec) * 1e-9
+        p1 = self._extract_planar(t1)
+        gap = s - s1
+        if gap <= 0.0:
+            return p1
+        if gap > max_extrap_sec:
+            return None
+        s0 = s1 - window_sec
+        t0 = self._raw_lookup(
+            target, source, BuiltinTime(sec=int(s0), nanosec=int((s0 % 1.0) * 1e9))
+        )
+        if t0 is None:
+            return p1
+        p0 = self._extract_planar(t0)
+        w = s1 - (float(t0.header.stamp.sec) + float(t0.header.stamp.nanosec) * 1e-9)
+        if w <= 1e-3:
+            return p1
+        dyaw = math.atan2(math.sin(p1[2] - p0[2]), math.cos(p1[2] - p0[2]))
+        k = gap / w
+        return (p1[0] + (p1[0] - p0[0]) * k, p1[1] + (p1[1] - p0[1]) * k, p1[2] + dyaw * k)
+
     def lookup_planar_stamped_with_info(
         self, target: str, source: str, stamp,
     ) -> Tuple[Optional[Tuple[float, float, float]], str]:

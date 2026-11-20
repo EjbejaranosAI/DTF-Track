@@ -110,12 +110,30 @@ def _load_opencv_model(path: Path, kind: ModelKind) -> Tuple[Optional[object], i
     if legacy is not None:
         n_trees = 1
         if kind == "random_forest":
-            try:
-                n_trees = max(1, legacy.getTermCriteria()[1])
-            except Exception:
-                n_trees = 50
+            # Models read from FileStorage report the default term criteria (50),
+            # not the real tree count; prefer the stored "ntrees" when present.
+            n_trees = _filestorage_ntrees(path) or 0
+            if n_trees <= 0:
+                try:
+                    n_trees = max(1, legacy.getTermCriteria()[1])
+                except Exception:
+                    n_trees = 50
         return legacy, n_trees
     return None, 1
+
+
+def _filestorage_ntrees(path: Path) -> Optional[int]:
+    fs = cv2.FileStorage(str(path), cv2.FILE_STORAGE_READ)
+    if not fs.isOpened():
+        return None
+    try:
+        for name in ("classifier", "trees", "RTrees", "opencv_ml_rtrees", "random_forest"):
+            node = fs.getNode(name)
+            if not node.empty() and not node.getNode("ntrees").empty():
+                return int(node.getNode("ntrees").real())
+        return None
+    finally:
+        fs.release()
 
 
 def _normalize_adaboost_score(raw: float, threshold: float) -> Tuple[bool, float]:
@@ -198,7 +216,11 @@ class SpencerLearnedDetector(LidarDetector):
         else:
             fv = compute_feature_vector(seg).reshape(1, -1)
         if self._kind == "adaboost":
-            raw = float(self._model.predict(fv)[1][0][0])
+            # Without PREDICT_SUM OpenCV returns the class label (0/1), not the
+            # weighted vote sum Spencer thresholds on (~[-10, +3], boundary 0).
+            raw = float(
+                self._model.predict(fv, flags=cv2.ml.DTREES_PREDICT_SUM)[1][0][0]
+            )
             is_person, score = _normalize_adaboost_score(raw, self._threshold)
             return is_person, score, raw
         _, results = self._model.predict(fv, flags=cv2.ml.DTREES_PREDICT_SUM)

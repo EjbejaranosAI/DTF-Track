@@ -8,10 +8,12 @@ data_files = [
     ("share/" + package_name, ["package.xml"]),
     ("share/" + package_name + "/launch", glob.glob("launch/*.launch.py")),
     ("share/" + package_name + "/config", glob.glob("config/*.yaml")),
+    ("share/" + package_name + "/config/zones", glob.glob("config/zones/*.yaml")),
     ("share/" + package_name + "/rviz", glob.glob("rviz/*.rviz")),
     ("share/" + package_name + "/models/spencer_rf", glob.glob("models/spencer_rf/*.gz")),
     ("share/" + package_name + "/models/spencer_adaboost", glob.glob("models/spencer_adaboost/*.*")),
     ("share/" + package_name + "/models/yolo", glob.glob("models/yolo/*.*")),
+    ("share/" + package_name + "/models/reid", glob.glob("models/reid/*.pth")),
     ("share/" + package_name + "/scripts", glob.glob("scripts/*.sh")),
 ]
 
