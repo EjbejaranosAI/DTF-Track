@@ -1,13 +1,13 @@
-"""Actualizacion de tracks (Kalman + asociacion YOLO / LiDAR) y export a Detection2DArray.
+"""Track update (Kalman + YOLO / LiDAR association) and export to Detection2DArray.
 
-Orden por ciclo (ver docs/PIPELINE.md):
-  Modo `yolo_auxiliary_person_only` (cascada tipo Spencer: laser primero):
-  1) predict(dt); 2) LiDAR como si YOLO estuviera apagado; 3) poda/dedup; 4) YOLO solo confirma
-     person en tracks existentes (color/bbox imagen), sin correct() ni spawn desde camara.
+Per-cycle order (see docs/PIPELINE.md):
+  `yolo_auxiliary_person_only` mode (Spencer-style cascade: laser first):
+  1) predict(dt); 2) LiDAR as if YOLO were off; 3) prune/dedup; 4) YOLO only confirms
+     person on existing tracks (colour/image bbox), no correct() and no spawn from the camera.
 
-  Modo legacy (YOLO en el tracker):
-  1) predict(dt); 2) asociacion YOLO + correct opcional; 3) IoU imagen si aplica;
-  4) LiDAR; 5) missed_frames, poda, flags dinamicos
+  Legacy mode (YOLO inside the tracker):
+  1) predict(dt); 2) YOLO association + optional correct; 3) image IoU if applicable;
+  4) LiDAR; 5) missed_frames, pruning, dynamic flags
 """
 
 import math
@@ -85,7 +85,7 @@ def _record_person_lidar_position(tr: Track, map_x: float, map_y: float, stamp_s
 def _person_lidar_micro_jitter(
     tr: Track, map_x: float, map_y: float, threshold_m: float
 ) -> bool:
-    """True si la medicion casi no se movio respecto al ultimo correct() laser."""
+    """True if the measurement barely moved since the last laser correct()."""
     if threshold_m <= 0.0 or tr.class_name != "person":
         return False
     if float(getattr(tr, "last_lidar_correct_sec", 0.0)) <= 0.0:
@@ -138,7 +138,7 @@ def _person_track_dual_audit_pass(
     yolo_seen_sec: float,
     corrected_spawn_tier: bool,
 ) -> bool:
-    """Track existente: YOLO reciente o cluster maintenance cerca (1 detector basta; no exige spawn-tier)."""
+    """Existing track: recent YOLO or a maintenance cluster nearby (1 detector is enough; spawn tier not required)."""
     if corrected_spawn_tier:
         return True
     lr = float(getattr(tr, "last_rgb_person_sec", 0.0))
@@ -157,7 +157,7 @@ def _spawn_initiator_accepts_step(
     max_step_m: float,
     max_vel_mps: float,
 ) -> bool:
-    """Spencer logic_initiator: rechaza saltos imposibles entre scans consecutivos del mismo pending."""
+    """Spencer logic_initiator: rejects impossible jumps between consecutive scans of the same pending track."""
     if pending.streak <= 0 or not pending.touched_this_cycle:
         return True
     dt = max(stamp_sec - pending.last_stamp_sec, 1e-4)
@@ -176,10 +176,10 @@ def _assign_person_yolo_iou_pairs(
     candidate_ym_indices: List[int],
     iou_min: float,
 ) -> List[Tuple[int, int]]:
-    """Empareja tracks person vs detecciones YOLO person por IoU en imagen (Hungarian).
+    """Matches person tracks to YOLO person detections by image IoU (Hungarian).
 
-    Solo usa bbox imagen + clase person; ignora map_xy para el matching (evita permutas al girar).
-    Devuelve pares (track_index, indice en yolo_meas).
+    Only uses the image bbox + person class; ignores map_xy for matching (avoids swaps while turning).
+    Returns pairs (track_index, index in yolo_meas).
     """
     person_tis = [ti for ti in track_indices if str(tracks[ti].class_name).lower() == "person"]
     person_ym_idx = [
@@ -268,8 +268,8 @@ def _image_only_soft_associate(
     stamp_sec: float,
     min_iou: float,
 ) -> List[int]:
-    """Si YOLO no tiene map_xy (TF/rayo fallo al mover el base), mantiene ID por IoU en imagen.
-    No hace Kalman correct (no hay pose map); evita missed_frames y actualiza bbox."""
+    """If YOLO has no map_xy (TF/ray failed while the base moves), keeps the ID by image IoU.
+    No Kalman correct (no map pose); avoids missed_frames and updates the bbox."""
     mapless_idx = [i for i, ym in enumerate(yolo_meas) if ym.map_xy is None]
     if not mapless_idx or not unmatched_track_indices:
         return unmatched_track_indices
@@ -317,7 +317,7 @@ def _axis_aligned_square_iou_map(
     by: float,
     side_m: float,
 ) -> float:
-    """IoU en el plano mapa de dos cuadrados iguales, ejes alineados a x/y (como caja persona en RViz)."""
+    """Map-plane IoU of two equal axis-aligned squares (like the person box in RViz)."""
     if side_m <= 1e-9:
         return 0.0
     h = side_m * 0.5
@@ -345,7 +345,7 @@ def _dedup_overlapping_person_tracks_map(
     merge_min_iou: float,
     lidar_only: bool,
 ) -> None:
-    """NMS tipo IoU en mapa: un track `person` por solape fuerte (varios segmentos/spawns -> mismo punto)."""
+    """Map IoU NMS: one `person` track per strong overlap (several segments/spawns -> same point)."""
     if merge_min_iou <= 0.0 or len(tracks) < 2:
         return
     candidates = [
@@ -395,7 +395,7 @@ def _delete_temporal_duplicate_person_tracks(
     max_dist_m: float,
     lidar_only: bool,
 ) -> None:
-    """Spencer NNH deleteDuplicateTracks: dos person muy cercanas en los ultimos N ciclos -> una sola ID."""
+    """Spencer NNH deleteDuplicateTracks: two persons very close over the last N cycles -> a single ID."""
     if not enable or len(tracks) < 2 or compare_n < 2 or must_match < 1 or max_dist_m <= 0.0:
         return
     max_d2 = float(max_dist_m) * float(max_dist_m)
@@ -488,7 +488,7 @@ def _yolo_auxiliary_match_classes(
     track_laser_polar: Optional[Dict[int, Tuple[float, float]]] = None,
     skip_track_indices: Optional[Set[int]] = None,
 ) -> Set[int]:
-    """Asocia detecciones YOLO de `match_classes` a tracks (sin Kalman). Devuelve tracks matcheados."""
+    """Associates YOLO detections of `match_classes` to tracks (no Kalman). Returns the matched tracks."""
     if not tracks or not yolo_meas or not match_classes:
         return set()
     min_hits = max(1, int(min_track_hits))
@@ -511,7 +511,7 @@ def _yolo_auxiliary_match_classes(
             and ti not in used_ti
         )
 
-    # Fase 0: proyeccion track→imagen (punto dentro de bbox YOLO).
+    # Phase 0: track -> image projection (point inside the YOLO bbox).
     _bbox_m = max(0.0, float(image_point_bbox_margin_px))
     if track_image_xy:
         by_score = sorted(class_idx, key=lambda i: yolo_meas[i].score, reverse=True)
@@ -548,7 +548,7 @@ def _yolo_auxiliary_match_classes(
                 used_yi.add(yi)
                 on_match(best_ti, ym)
 
-    # Fase 1: map_xy del rayo laser (no rgb_only si distance_match_lidar_ray_only)
+    # Phase 1: map_xy from the laser ray (not rgb_only if distance_match_lidar_ray_only)
     with_map: List[int] = []
     for i in class_idx:
         if i in used_yi:
@@ -582,7 +582,7 @@ def _yolo_auxiliary_match_classes(
             used_yi.add(yi)
             on_match(best_ti, ym)
 
-    # Fase 1b: (r, theta) laser del hit YOLO vs track proyectado al laser (confirmacion profundidad /scan).
+    # Phase 1b: laser (r, theta) of the YOLO hit vs track projected to the laser (/scan depth confirmation).
     if (
         bool(polar_match_enable)
         and track_laser_polar is not None
@@ -624,7 +624,7 @@ def _yolo_auxiliary_match_classes(
                 used_yi.add(yi)
                 on_match(best_ti, ym)
 
-    # Fase 2: IoU en imagen (tracks con last_bbox)
+    # Phase 2: image IoU (tracks with last_bbox)
     remaining = [i for i in class_idx if i not in used_yi]
     remaining.sort(key=lambda i: yolo_meas[i].score, reverse=True)
     iou_thr = float(image_iou_min)
@@ -644,7 +644,7 @@ def _yolo_auxiliary_match_classes(
             used_yi.add(yi)
             on_match(best_ti, ym)
 
-    # Fase 3: mismo angulo en /scan que el rayo al centro (o base) del bbox YOLO.
+    # Phase 3: same /scan angle as the ray to the centre (or bottom) of the YOLO bbox.
     if (
         bearing_match_max_rad > 1e-9
         and track_laser_bearing_rad is not None
@@ -700,7 +700,7 @@ def apply_yolo_auxiliary_person_confirmation(
     track_laser_polar: Optional[Dict[int, Tuple[float, float]]] = None,
     reid_cfg: Optional[ReIdConfig] = None,
 ) -> Set[int]:
-    """Sin tocar Kalman: confirma person en tracks laser existentes. Devuelve indices matcheados."""
+    """Without touching the Kalman: confirms person on existing laser tracks. Returns matched indices."""
 
     def _on_person(ti: int, ym: YoloMeasurement) -> None:
         tr = tracks[ti]
@@ -749,7 +749,7 @@ def apply_yolo_auxiliary_person_rejection(
     min_track_hits: int = 1,
     prune_missed_frames: int = 9999,
 ) -> None:
-    """En FOV camara: sin YOLO person alineado → streak; al umbral marca para poda (FP mesa)."""
+    """Inside the camera FOV: no aligned YOLO person -> streak; at the threshold, mark for pruning (table FP)."""
     if reject_streak_frames <= 0 or not track_image_xy:
         return
     min_hits = max(1, int(min_track_hits))
@@ -763,7 +763,7 @@ def apply_yolo_auxiliary_person_rejection(
         if ti not in in_fov:
             tr.yolo_in_fov_reject_streak = 0
             continue
-        # Ya confirmado por YOLO alguna vez: no rechazar por ausencia puntual en imagen.
+        # Already confirmed by YOLO at some point: do not reject for a brief absence in the image.
         if float(getattr(tr, "last_rgb_person_sec", 0.0)) > 0.0:
             tr.yolo_in_fov_reject_streak = 0
             continue
@@ -779,7 +779,7 @@ def update_yolo_auxiliary_camera_fov_state(
     *,
     min_track_hits: int = 1,
 ) -> None:
-    """Marca tracks dentro/fuera del FOV camara (color verde-azulado al salir del FOV)."""
+    """Marks tracks inside/outside the camera FOV (teal colour when leaving the FOV)."""
     min_hits = max(1, int(min_track_hits))
     in_fov = track_image_xy or {}
     for ti, tr in enumerate(tracks):
@@ -798,7 +798,7 @@ def update_yolo_auxiliary_fov_unseen(
     *,
     min_track_hits: int = 1,
 ) -> None:
-    """Alias retrocompatible: actualiza estado FOV camara."""
+    """Backward-compatible alias: updates the camera FOV state."""
     update_yolo_auxiliary_camera_fov_state(
         tracks, stamp_sec, track_image_xy, min_track_hits=min_track_hits
     )
@@ -828,60 +828,60 @@ def update_tracks(
     person_dynamic_classes: Tuple[str, ...] = ("person",),
     person_lidar_innovation_gate_m: float = 0.0,
     person_lidar_innovation_gate_stale_rgb_sec: float = 3.5,
-    # Si |cluster - prediccion| > umbral (m), no correct() aunque Hungaro emparejo (evita salto a muro al girar).
+    # If |cluster - prediction| > threshold (m), no correct() even if Hungarian matched (avoids jumping to a wall while turning).
     person_lidar_max_correction_jump_m: float = 0.0,
-    # Tras correct(), si |v| < esto, anular velocidad Kalman (caja quieta en mapa).
+    # After correct(), if |v| < this, zero the Kalman velocity (box still on the map).
     person_static_zero_velocity_speed_m: float = 0.0,
-    # Suaviza saltos de bbox verde: YOLO+map_xy jitter al mover el robot.
+    # Smooths green bbox jumps: YOLO+map_xy jitter while the robot moves.
     person_yolo_measurement_noise_scale: float = 3.0,
-    # Sin rayo laser (rgb_only): casi no mover el Kalman (proyeccion camara + TF inestables al mover base).
+    # Without a laser ray (rgb_only): barely move the Kalman (camera projection + TF unstable while the base moves).
     person_yolo_rgb_only_measurement_noise_scale: float = 14.0,
-    # 0 = off. Si |yolo - prediccion| > gate (m), no corrige Kalman (evita TF suelto).
+    # 0 = off. If |yolo - prediction| > gate (m), do not correct the Kalman (avoids a loose TF).
     person_yolo_innovation_gate_m: float = 0.0,
     scan_verify_data=None,
     scan_verify_range_tolerance_m: float = 0.50,
     scan_verify_window_deg: float = 15.0,
-    # Ciclos sin cluster ni scan_verify antes de missed++ (FOV). 0 = comportamiento anterior.
+    # Cycles without cluster or scan_verify before missed++ (FOV). 0 = previous behaviour.
     person_missed_debounce_frames: int = 0,
     # Spencer Logic Initiator: separate limits for never-RGB tracks
     person_lidar_only_max_missed_frames: int = 20,
     lidar_initiation_max_age_static_sec: float = 8.0,
-    # Tracks que ya se alejaron > esto de su nacimiento no se podan por estaticos. 0 = off.
+    # Tracks that already moved > this from their birth point are not pruned as static. 0 = off.
     lidar_initiation_static_min_travel_m: float = 0.0,
     # Spencer occlusion: tracks outside LiDAR FOV are OCCLUDED (not MISSED).
     max_occlusions_before_deletion: int = 120,
-    # Spencer: tracks maduros aguantan mas ciclos oclusos (detras del robot). 0 = mismo limite que arriba.
+    # Spencer: mature tracks survive more occluded cycles (behind the robot). 0 = same limit as above.
     max_occlusions_mature_track: int = 0,
     # Spencer: Mahalanobis + chi² gating for LiDAR association.
     use_mahalanobis_lidar: bool = False,
-    # Ventana s tras ultimo YOLO person: no corregir Kalman con laser (solo scan verify) → OL estable.
+    # Window (s) after the last YOLO person: do not correct the Kalman with laser (scan verify only) -> stable OL.
     person_hold_skip_lidar_correct_sec: float = 0.0,
-    # Persona ya matcheada por YOLO: sigue entrando en asociacion laser (posicion fiable al girar).
+    # Person already matched by YOLO: still enters laser association (reliable position while turning).
     person_lidar_refinement_after_yolo: bool = True,
-    # Multiplica ruido medicion YOLO en persona si hay refinamiento laser (YOLO solo ancla debil).
+    # Multiplies YOLO measurement noise on a person when there is laser refinement (YOLO only a weak anchor).
     person_yolo_weak_scale_with_lidar_refinement: float = 8.0,
-    # Si YOLO no matcheo por distancia en mapa pero el bbox solapa (IoU) un track sin matchear, unificar (menos IDs duplicados).
+    # If YOLO did not match by map distance but the bbox overlaps (IoU) an unmatched track, merge them (fewer duplicate IDs).
     yolo_merge_unmatched_iou: float = 0.0,
-    # Spencer: con clusters en el ciclo, no corregir Kalman con YOLO en persona; laser primero, YOLO si falla laser.
+    # Spencer: with clusters in the cycle, do not correct the Kalman with YOLO on a person; laser first, YOLO if laser fails.
     person_yolo_defer_position_to_lidar: bool = True,
-    # Con defer+laser: antes del Hungaro en mapa, emparejar person<->person YOLO por IoU imagen (estable al girar).
+    # With defer+laser: before the map Hungarian, pair person<->YOLO person by image IoU (stable while turning).
     person_yolo_match_by_iou_first: bool = True,
     person_yolo_assoc_iou_min: float = 0.12,
-    # Con fusion laser: YOLO no hace correct() en mapa (ninguna clase) y no abre tracks desde detecciones camara.
-    # Solo actualiza etiqueta/bbox/RGB; la posicion Kalman queda 100% laser + predict.
+    # With laser fusion: YOLO never does correct() on the map (any class) and never opens tracks from camera detections.
+    # It only updates label/bbox/RGB; the Kalman position stays 100% laser + predict.
     yolo_lidar_fusion_label_only: bool = False,
-    # Tras correct() laser: last_update_source=lidar-only (como sin YOLO); verde RViz por last_rgb reciente.
+    # After a laser correct(): last_update_source=lidar-only (as without YOLO); RViz green from a recent last_rgb.
     yolo_visual_lidar_parity: bool = False,
-    # No crear track laser-only person cerca de un person con RGB reciente (reduce FP en muros junto al confirmado).
+    # Do not create a laser-only person track near a person with recent RGB (reduces FPs on walls next to the confirmed one).
     person_lidar_spawn_suppress_radius_m: float = 0.0,
     person_lidar_spawn_suppress_rgb_sec: float = 0.0,
-    # 0 = usar leg_hypothesis_min_score; >0 umbral minimo para spawn laser-only person.
+    # 0 = use leg_hypothesis_min_score; >0 minimum score to spawn a laser-only person.
     lidar_spawn_person_min_leg_score: float = 0.0,
-    # >0: en un mismo ciclo no crear dos tracks laser si los centros quedan mas cerca (evita #25/#26 duplicados).
+    # >0: within one cycle, do not create two laser tracks whose centres are closer than this (avoids #25/#26 duplicates).
     lidar_spawn_same_frame_dedup_m: float = 0.0,
-    # Lista mutable en el nodo; 0 frames = crear person laser al instante (comportamiento previo).
+    # Mutable list in the node; 0 frames = create the laser person immediately (previous behaviour).
     pending_lidar_spawns: Optional[List[PendingLidarSpawn]] = None,
-    # Fase 2 dual-tier: solo estos clusters abren track (None = unmatched maintenance).
+    # Dual-tier phase 2: only these clusters open tracks (None = unmatched maintenance).
     lidar_spawn_meas: Optional[List[LidarMeasurement]] = None,
     lidar_spawn_confirm_frames: int = 0,
     lidar_spawn_confirm_radius_m: float = 0.42,
@@ -901,7 +901,7 @@ def update_tracks(
     scan_verify_require_nearby_cluster: bool = True,
     scan_verify_nearby_cluster_m: float = 0.55,
     scan_verify_nearby_min_leg_score: float = 0.62,
-    # 0 = off. IoU en mapa entre cajas person (lado = person_box_side_m): quita tracks duplicados mismo blanco.
+    # 0 = off. Map IoU between person boxes (side = person_box_side_m): removes duplicate tracks on the same target.
     person_track_map_merge_min_iou: float = 0.0,
     person_track_map_merge_box_m: float = 0.6,
     person_track_map_merge_lidar_only: bool = True,
@@ -911,7 +911,7 @@ def update_tracks(
     duplicate_track_max_dist_m: float = 0.18,
     duplicate_track_lidar_only: bool = True,
 ) -> int:
-    """Actualiza `tracks` in place y devuelve el siguiente `track_id` libre."""
+    """Updates `tracks` in place and returns the next free `track_id`."""
     dyn_classes = {str(c).lower() for c in person_dynamic_classes}
     _confirm_n = int(lidar_spawn_confirm_frames)
     if pending_lidar_spawns is not None and _confirm_n > 0:
@@ -930,8 +930,8 @@ def update_tracks(
         yolo_association_to_meas_idx.append(idx)
 
     person_yolo_matched_ti: Set[int] = set()
-    # Cualquier track que matcheo YOLO este ciclo (cualquier clase): debe seguir en el pool laser;
-    # si solo usaramos person_yolo_matched_ti, un match YOLO no-person excluiria el track del Hungaro laser.
+    # Any track that matched YOLO this cycle (any class) must stay in the laser pool;
+    # if we only used person_yolo_matched_ti, a non-person YOLO match would exclude the track from the laser Hungarian.
     all_yolo_matched_ti: Set[int] = set()
     _refine_lidar = (
         bool(person_lidar_refinement_after_yolo)
@@ -939,8 +939,8 @@ def update_tracks(
         and len(lidar_meas) > 0
     )
     _weak_yolo = float(person_yolo_weak_scale_with_lidar_refinement)
-    # Persona: YOLO solo confirma (clase/bbox/RGB); el Kalman en mapa lo mueve solo el laser (o predict si no hay match).
-    # No exigir len(lidar_meas)>0: si un ciclo no trae clusters, igual no debe proyectar YOLO sobre el estado.
+    # Person: YOLO only confirms (class/bbox/RGB); only the laser moves the map Kalman (or predict if no match).
+    # Do not require len(lidar_meas)>0: even if a cycle brings no clusters, YOLO must not be projected onto the state.
     _defer_yolo_pos = bool(person_yolo_defer_position_to_lidar) and bool(enable_lidar_fusion)
     _yolo_label_only = bool(yolo_lidar_fusion_label_only) and bool(enable_lidar_fusion)
 
@@ -1120,7 +1120,7 @@ def update_tracks(
         )
 
     if enable_lidar_fusion and lidar_meas:
-        # Spencer: alta precision en asociacion person↔cluster (no 0.5× umbral: eso metia muros).
+        # Spencer: high precision in person<->cluster association (not 0.5x threshold: that let walls in).
         lidar_eligible = list(unmatched_tracks)
         if person_lidar_refinement_after_yolo:
             for ti in all_yolo_matched_ti:
@@ -1158,13 +1158,13 @@ def update_tracks(
                 return True
             if tr.class_name != "person":
                 return True
-            # Con YOLO desactivado last_rgb_person_sec=0 → gate nunca aplica (comportamiento estable).
-            # Con YOLO activo last_rgb>0 y gate>0: se podian rechazar clusters laser legitimos si la prediccion
-            # o el TF al girar desalineaban >gate m → sin correct() laser, drift/occlusion (cajas "van con el robot").
-            # Si la posicion en mapa la define solo el laser (defer / label-only), no apretar DA laser con RGB.
+            # With YOLO off last_rgb_person_sec=0 -> the gate never applies (stable behaviour).
+            # With YOLO on, last_rgb>0 and gate>0: legitimate laser clusters could be rejected if the prediction
+            # or the TF while turning were misaligned by >gate m -> no laser correct(), drift/occlusion (boxes "move with the robot").
+            # If the map position is defined by the laser only (defer / label-only), do not tighten laser DA with RGB.
             if _yolo_label_only or _defer_yolo_pos:
                 return True
-            # Spencer-like: gate solo con RGB reciente; si no hubo RGB o paso stale_win, confiar en laser (map).
+            # Spencer-like: gate only with recent RGB; if there was no RGB or stale_win passed, trust the laser (map).
             if tr.last_rgb_person_sec <= 0.0:
                 return True
             stale_win = float(person_lidar_innovation_gate_stale_rgb_sec)
@@ -1191,10 +1191,10 @@ def update_tracks(
                 used_lidar_meas.add(real_mi)
             remaining_person = p_unmatched
 
-        # Phase 1b: Personas sin match tras fase 1 (solo clusters leg_candidate_score "high").
-        # Por defecto solo last_rgb<=0: si ya hubo YOLO, no usar suelo laxo (evita muros en persona "confirmada").
-        # Con defer/label-only la posicion en mapa es laser: person con last_rgb>0 que fallan fase 1 NO deben
-        # quedar fuera de 1b (no entran en fase 2 = solo no-person) → sin correct() laser ese ciclo → deriva.
+        # Phase 1b: persons unmatched after phase 1 (only "high" leg_candidate_score clusters).
+        # By default only last_rgb<=0: if YOLO was already seen, do not use the loose floor (avoids walls on a "confirmed" person).
+        # With defer/label-only the map position is laser: persons with last_rgb>0 that fail phase 1 must NOT
+        # be left out of 1b (they don't enter phase 2 = non-person only) -> no laser correct() that cycle -> drift.
         person_phase1b_eligible = [
             ti
             for ti in remaining_person
@@ -1206,8 +1206,8 @@ def update_tracks(
             )
         ]
         _hi_floor = max(0.58, leg_hypothesis_min_score * 0.88)
-        # Sin YOLO, todos los person son "never_rgb": si el suelo es ~0.52×leg, segmentos de muro
-        # (~0.45–0.65) siguen matcheando y arrastran la caja. Acotar: 1b no más laxo que hi−δ.
+        # Without YOLO every person is "never_rgb": if the floor is ~0.52x leg, wall segments
+        # (~0.45–0.65) keep matching and drag the box. Bound it: 1b no looser than hi−δ.
         _never_rgb_soft_cap_below_hi = 0.08
         _soft_floor = max(
             0.38,
@@ -1289,7 +1289,7 @@ def update_tracks(
                 and tr.class_name == "person"
                 and jump > _max_lidar_jump
             ):
-                # Giro brusco: aceptar cluster con mas ruido de medicion (no congelar caja).
+                # Sharp turn: accept the cluster with more measurement noise (do not freeze the box).
                 tr.correct(lm.map_x, lm.map_y, measurement_noise_scale=3.5)
                 lidar_position_corrected_ti.add(ti)
                 _record_person_lidar_position(tr, lm.map_x, lm.map_y, stamp_sec)
@@ -1581,7 +1581,7 @@ def update_tracks(
     if pending_lidar_spawns is not None and _confirm_n > 0:
         pending_lidar_spawns[:] = [p for p in pending_lidar_spawns if p.touched_this_cycle]
 
-    # --- Scan verification (presencia laser sin correct) + auditoria dual-tier periodica ---
+    # --- Scan verification (laser presence without correct) + periodic dual-tier audit ---
     _audit_on = bool(person_track_dual_audit_enable)
     _audit_iv = max(1, int(person_track_dual_audit_interval_frames))
     _audit_r = float(person_track_dual_audit_radius_m)
@@ -1651,7 +1651,7 @@ def update_tracks(
             mx, my = tr.state()
             in_fov = is_track_in_lidar_fov(scan, mx, my, tf_tx, tf_ty, tf_yaw)
         if in_fov:
-            # Sin cluster ni verify: debounce antes de missed++ (evita parpadeo con require_two).
+            # No cluster and no verify: debounce before missed++ (avoids flicker with require_two).
             tr.consecutive_no_lidar_presence += 1
             if _miss_debounce <= 0 or tr.consecutive_no_lidar_presence > _miss_debounce:
                 tr.missed_frames += 1
@@ -1755,26 +1755,26 @@ def tracks_to_detection_array(
     overlay_max_age_sec: float = 0.0,
     frame_sec: float = 0.0,
 ) -> Detection2DArray:
-    """Todos los tracks confirmados (Kalman) como Detection2DArray.
+    """All confirmed (Kalman) tracks as a Detection2DArray.
 
-    fov_only=False (default, p.ej. para /detections/tracked): incluye
-    tambien tracks solo-LiDAR sin last_bbox (fuera del FOV de la camara,
-    o aun no confirmados por YOLO) -- se publican con bbox en blanco
-    (0,0)-(0,0), la vista completa de todo lo que el tracker ve.
+    fov_only=False (default, e.g. for /detections/tracked): also includes
+    LiDAR-only tracks without last_bbox (outside the camera FOV,
+    or not yet confirmed by YOLO) -- published with an empty bbox
+    (0,0)-(0,0), the full view of everything the tracker sees.
 
-    fov_only=True (p.ej. para un topic separado tipo /detections/tracked_fov,
-    pensado para consumidores que solo saben razonar sobre lo que hay en
-    imagen, como vlm_hri): descarta tracks sin last_bbox, y los que tengan
-    un last_bbox mas viejo que overlay_max_age_sec (evita "caja congelada"
-    de una persona que ya salio de cuadro) -- mismo guard que ya usa
-    build_dot_yolo_crop_array para /dot_yolo_crops.
+    fov_only=True (e.g. for a separate topic like /detections/tracked_fov,
+    meant for consumers that can only reason about what is in the
+    image, such as vlm_hri): drops tracks without last_bbox, and those whose
+    last_bbox is older than overlay_max_age_sec (avoids a "frozen box"
+    of a person who already left the frame) -- same guard already used by
+    build_dot_yolo_crop_array for /dot_yolo_crops.
     """
     arr = Detection2DArray()
     arr.header = header
     for tr in tracks:
         if tr.hits < min_confirmed_hits:
             continue
-        # Spencer: person tracks sin RGB son tentative → no publicar
+        # Spencer: person tracks without RGB are tentative -> not published
         if require_visual_confirmation and tr.class_name == "person" and tr.last_rgb_person_sec <= 0.0:
             continue
         if fov_only:

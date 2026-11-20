@@ -128,13 +128,13 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "profile",
                 default_value="robot",
-                description="robot (default, TIAGO real) o sim (Gazebo)",
+                description="robot (default, real TIAGO) or sim (Gazebo)",
                 choices=["robot", "sim"],
             ),
             DeclareLaunchArgument(
                 "params_file",
                 default_value="",
-                description="Override YAML; vacio = segun profile",
+                description="Override YAML; empty = chosen by profile",
             ),
             DeclareLaunchArgument(
                 "model_name", default_value="yolo26n.pt", description="YOLO model filename"
@@ -172,83 +172,83 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "detection_source",
                 default_value="internal",
-                description="internal o external",
+                description="internal or external",
             ),
             DeclareLaunchArgument(
                 "external_detections_topic",
                 default_value="/external/detections",
-                description="vision_msgs/Detection2DArray si detection_source:=external",
+                description="vision_msgs/Detection2DArray if detection_source:=external",
             ),
             DeclareLaunchArgument(
                 "show_image_view",
                 default_value="false",
-                description="Abre rqt_image_view en imagen anotada",
+                description="Open rqt_image_view on the annotated image",
             ),
             DeclareLaunchArgument(
                 "use_rviz",
                 default_value="false",
-                description="Abre RViz2 con rviz/dynamic_tracking.rviz",
+                description="Open RViz2 with rviz/dynamic_tracking.rviz",
             ),
             DeclareLaunchArgument(
                 "enable_yolo_detections",
                 default_value="true",
-                description="YOLO + confirmacion auxiliar",
+                description="YOLO + auxiliary confirmation",
             ),
             DeclareLaunchArgument(
                 "publish_dot_yolo_crops",
                 default_value="false",
-                description="Publicar /dot_yolo_crops",
+                description="Publish /dot_yolo_crops",
             ),
             DeclareLaunchArgument(
                 "image_qos_reliability",
                 default_value="",
-                description="best_effort o reliable; vacio = YAML. Si WARN QoS RELIABILITY, prueba el otro valor.",
+                description="best_effort or reliable; empty = YAML. On a QoS RELIABILITY WARN, try the other value.",
             ),
             DeclareLaunchArgument(
                 "enable_reid",
                 default_value="auto",
-                description="Re-ID OSNet (recupera IDs por apariencia): true|false|auto (auto = YAML).",
+                description="OSNet Re-ID (recovers IDs by appearance): true|false|auto (auto = YAML).",
             ),
             DeclareLaunchArgument(
                 "area_filter_enable",
                 default_value="auto",
-                description="true/false o auto (usa el YAML segun profile)",
+                description="true/false or auto (uses the YAML of the profile)",
             ),
             DeclareLaunchArgument(
                 "lidar_spawn_require_all_detectors",
                 default_value="auto",
-                description="true = RF+AdaBoost+leg para abrir ID; false/auto = YAML (require_two)",
+                description="true = RF+AdaBoost+leg needed to open an ID; false/auto = YAML (require_two)",
             ),
             DeclareLaunchArgument(
                 "area_filter_zones_file",
                 default_value="",
-                description="Zonas desde archivo: nombre en config/zones/ (p.ej. lab_perimeter, "
-                "lab_rectangle) o ruta a un .yaml; vacio = YAML; none = desactivar archivo",
+                description="Zones from a file: name in config/zones/ (e.g. lab_perimeter, "
+                "lab_rectangle) or path to a .yaml; empty = YAML; none = no zones file",
             ),
             DeclareLaunchArgument(
                 "area_filter_zones_json",
                 default_value="",
-                description='Override JSON ROI; vacio = YAML o x_min/x_max/y_min/y_max',
+                description='Override JSON ROI; empty = YAML or x_min/x_max/y_min/y_max',
             ),
             DeclareLaunchArgument(
                 "area_filter_x_min",
                 default_value="",
-                description="ROI rectangle x_min in map (m); vacio = YAML",
+                description="ROI rectangle x_min in map (m); empty = YAML",
             ),
             DeclareLaunchArgument(
                 "area_filter_x_max",
                 default_value="",
-                description="ROI rectangle x_max in map (m); vacio = YAML",
+                description="ROI rectangle x_max in map (m); empty = YAML",
             ),
             DeclareLaunchArgument(
                 "area_filter_y_min",
                 default_value="",
-                description="ROI rectangle y_min in map (m); vacio = YAML",
+                description="ROI rectangle y_min in map (m); empty = YAML",
             ),
             DeclareLaunchArgument(
                 "area_filter_y_max",
                 default_value="",
-                description="ROI rectangle y_max in map (m); vacio = YAML",
+                description="ROI rectangle y_max in map (m); empty = YAML",
             ),
             DeclareLaunchArgument(
                 "lidar_cluster_use_stamped_tf",
@@ -268,7 +268,7 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "debug",
                 default_value="false",
-                description="true: logs [POSE] cada ~100 ms (ver docs/DRIFT_FIX.md)",
+                description="true: [POSE] logs every ~100 ms (see docs/DRIFT_FIX.md)",
             ),
             OpaqueFunction(function=_launch_setup),
         ]

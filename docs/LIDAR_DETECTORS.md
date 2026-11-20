@@ -1,36 +1,37 @@
 # LiDAR multi-detector pipeline
 
-Un solo nodo ROS2 (`dynamic_tracking_node`): un `/scan` → segmentar una vez → varios
-clasificadores → fusionar → filtros mapa → Kalman. Inspirado en
+A single ROS 2 node (`dynamic_tracking_node`): one `/scan` → segment once → several
+classifiers → fuse → map filters → Kalman. Inspired by
 [Spencer `srl_laser_detectors`](https://gitlab.iri.upc.edu/labrobotica/ros/perception/people_tracking/spencer_people_tracking),
-pero **varios detectores en paralelo** (Spencer clásico usaba **uno** por nodo).
+but with **several detectors in parallel** (classic Spencer used **one** per node).
 
-## Flujo (diagrama)
+## Flow (diagram)
 
-![LiDAR: segment_scan, detectores en paralelo, fusion, filtros, Kalman](../imgs/lidar_detectors_flow.png)
+![LiDAR: segment_scan, parallel detectors, fusion, filters, Kalman](../imgs/lidar_detectors_flow.png)
 
-Fuente: [`docs/diagrams/lidar_detectors_flow.mmd`](diagrams/lidar_detectors_flow.mmd)
+Source: [`docs/diagrams/lidar_detectors_flow.mmd`](diagrams/lidar_detectors_flow.mmd)
 
-## Modelos en el repo
+## Models in the repo
 
-| Carpeta | Archivos | Uso |
+| Folder | Files | Use |
 |---------|----------|-----|
-| `models/spencer_rf/` | `*_noetic.random_forest.gz` | Rama GitLab **master** |
-| `models/spencer_adaboost/` | `lms500_0.25deg_height70cm_rathausgasse.adaboost` | Rama GitLab **icra16** (FileStorage YAML) |
+| `models/spencer_adaboost/` | `tiago_v3_2026-10-14.adaboost` | **Retrained on TIAGo Pro** (laser at 21 cm), `robot` profile default; see `training_detectors/` |
+| `models/spencer_rf/` | `*_noetic.random_forest.gz` | Original Spencer RF (GitLab **master** branch) |
+| `models/spencer_adaboost/` | `lms500_0.25deg_height70cm_rathausgasse.adaboost` | Original Spencer AdaBoost (GitLab **icra16** branch, FileStorage YAML) |
 
-El `.adaboost.txt` es solo métricas de entrenamiento (F1≈0.87 en datos Freiburg); no hace falta para ejecutar.
+The `.adaboost.txt` only holds training metrics (F1≈0.87 on Freiburg data); it is not needed at run time.
 
-## Spencer antiguo vs nuestro nodo
+## Old Spencer vs our node
 
 | | **old_spencer (ROS)** | **dynamic-tracking** |
 |--|----------------------|----------------------|
-| Detectores | **1** por launch (`type:=random_forest` **o** `adaboost` **o** `blob`) | **Varios** en `lidar_detectors_enabled` |
-| Fusión ML | No mezclaba RF+AdaBoost a la vez | `lidar_fusion_policy: max_score` → `max(rf, ada, heur)` |
-| Launch típico | `learned_detector_with_segmentation.launch` → RF por defecto | RF + AdaBoost + heurística |
+| Detectors | **1** per launch (`type:=random_forest` **or** `adaboost` **or** `blob`) | **Several** in `lidar_detectors_enabled` |
+| ML fusion | Did not mix RF+AdaBoost at the same time | `lidar_fusion_policy: max_score` → `max(rf, ada, heur)` |
+| Typical launch | `learned_detector_with_segmentation.launch` → RF by default | RF + AdaBoost + heuristic |
 
-En icra16 tenían **ambos** modelos en disco, pero en runtime elegías **uno** con el parámetro `type`.
+In icra16 they had **both** models on disk, but at run time you picked **one** with the `type` parameter.
 
-## Parámetros YAML clave
+## Key YAML parameters (sim profile)
 
 ```yaml
 lidar_detectors_enabled: ["spencer_rf", "spencer_adaboost", "leg_heuristic"]
@@ -41,21 +42,21 @@ spencer_adaboost_decision_threshold: -10.0
 spencer_rf_only_positive_classifications: false
 ```
 
-### Políticas de fusión
+### Fusion policies
 
-- **max_score** (prueba AdaBoost): sube el score si AdaBoost o heurística ven pierna aunque RF sea bajo (Gazebo).
-- **require_two** (anti-FP): solo segmentos donde **≥2** detectores dicen `person` (p. ej. RF + heurística, o AdaBoost + heurística).
+- **max_score** (AdaBoost test): raises the score if AdaBoost or the heuristic sees a leg even when RF is low (Gazebo).
+- **require_two** (anti-FP): only segments where **≥2** detectors say `person` (e.g. RF + heuristic, or AdaBoost + heuristic).
 
-## Cómo probar y fijar default
+## How to test and choose the default
 
 1. `colcon build --packages-select dynamic_tracking --symlink-install`
-2. Arrancar en Gazebo; en log: `LiDAR detectors: ['spencer_rf', 'spencer_adaboost', 'leg_heuristic']`
-3. Si **mejor** recall sin más FP → dejar lista como está.
-4. Si **más FP** en muros → quitar `spencer_adaboost` o usar `lidar_fusion_policy: "require_two"`.
-5. Si **peor** que solo RF+heur → volver a `["spencer_rf", "leg_heuristic"]`.
+2. Start in Gazebo; the log shows `LiDAR detectors: ['spencer_rf', 'spencer_adaboost', 'leg_heuristic']`
+3. If recall is **better** without more FPs → keep the list as it is.
+4. If there are **more FPs** on walls → remove `spencer_adaboost` or use `lidar_fusion_policy: "require_two"`.
+5. If it is **worse** than RF+heuristic only → go back to `["spencer_rf", "leg_heuristic"]`.
 
-## Añadir otro detector
+## Adding another detector
 
-1. Clase en `dynamic_tracking/lidar_detection/detectors/`.
-2. Registrar en `build_lidar_pipeline()` (`pipeline.py`).
-3. Añadir id en `lidar_detectors_enabled`.
+1. Class in `dynamic_tracking/lidar_detection/detectors/`.
+2. Register it in `build_lidar_pipeline()` (`pipeline.py`).
+3. Add its id to `lidar_detectors_enabled`.

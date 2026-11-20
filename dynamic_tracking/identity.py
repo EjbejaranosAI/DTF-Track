@@ -1,25 +1,25 @@
-"""Galeria de identidades por apariencia: recupera el track_id original tras un ID switch.
+"""Appearance identity gallery: restores the original track_id after an ID switch.
 
-Ciclo (llamar `step()` con el lock de tracks tomado, tras la confirmacion YOLO):
-  1) Tracks person que desaparecen -> su banco de embeddings pasa a la galeria (clave = id antiguo).
-  2) Tracks person nuevos (pocas muestras de camara) se comparan con la galeria: con una
-     muestra >= `strong_threshold` hereda su id al momento; entre `match_threshold` y
-     ese valor, tras `confirm_hits` coincidencias seguidas con el mismo candidato.
-     Mientras decide, el track esta `pending` (los consumidores esperan su veredicto).
-  3) Nombres (`enroll`) viajan con el id: un track restaurado recupera tambien su nombre.
+Cycle (call `step()` while holding the tracks lock, after YOLO confirmation):
+  1) Person tracks that disappear -> their embedding bank moves to the gallery (key = old id).
+  2) New person tracks (few camera samples) are compared with the gallery: with one
+     sample >= `strong_threshold` they inherit its id at once; between `match_threshold` and
+     that value, after `confirm_hits` consecutive matches with the same candidate.
+     While deciding, the track is `pending` (consumers wait for its verdict).
+  3) Names (`enroll`) travel with the id: a restored track also gets its name back.
 
-Restricciones para no robar identidades:
-  - solo ids muertos (nunca dos tracks vivos con el mismo id);
-  - el candidato no pudo verse en camara a la vez que el track nuevo (co-visibilidad);
-  - similitud >= umbral y margen sobre el segundo mejor candidato de OTRA persona.
+Constraints so identities are not stolen:
+  - only dead ids (never two live tracks with the same id);
+  - the candidate cannot have been seen by the camera at the same time as the new track (co-visibility);
+  - similarity >= threshold and a margin over the second-best candidate from ANOTHER person.
 
-Duplicados: si una persona se pierde varias veces sin recuperarse, la galeria acaba
-con varias entradas suyas (p.ej. ids 4 y 11) que se disputan el margen y ya no se
-recupera nunca. Las entradas cuyos centroides se parecen mas que `duplicate_threshold`
-son la misma persona: el margen se mide contra las demas, se restaura la entrada
-canonica (con nombre, o el id mas antiguo) y el resto se funde
-en ella.
-Solo numpy: se testea sin torch ni ROS.
+Duplicates: if a person is lost several times without being recovered, the gallery ends up
+with several entries for them (e.g. ids 4 and 11) that fight over the margin, and the person is
+never recovered again. Entries whose centroids are more similar than `duplicate_threshold`
+are the same person: the margin is measured against the others, the canonical entry is
+restored (the named one, or the oldest id) and the rest are merged
+into it.
+Numpy only: tested without torch or ROS.
 """
 
 import json
@@ -35,7 +35,7 @@ from .types import Track
 
 @dataclass
 class GalleryEntry:
-    track_id: Optional[int]  # None para nombres cargados de disco (ids de otra ejecucion)
+    track_id: Optional[int]  # None for names loaded from disk (ids from another run)
     bank: List[np.ndarray]
     lost_sec: float
     last_rgb_sec: float
@@ -44,7 +44,7 @@ class GalleryEntry:
 
 @dataclass
 class _PendingMatch:
-    key: int  # clave de galeria
+    key: int  # gallery key
     hits: int = 0
     best_sim: float = 0.0
 
@@ -53,16 +53,16 @@ class _PendingMatch:
 class ReIdConfig:
     match_threshold: float = 0.75
     match_margin: float = 0.05
-    # Dos entradas de la galeria son la misma persona si sus centroides superan esto.
+    # Two gallery entries are the same person if their centroids exceed this.
     duplicate_threshold: float = 0.8
     confirm_hits: int = 2
-    # Una sola muestra basta si la similitud llega a esto (menos espera al reaparecer).
+    # A single sample is enough if the similarity reaches this (less waiting on reappearance).
     strong_threshold: float = 0.85
-    # El track deja de buscar en la galeria tras este numero de muestras (ya es "suyo").
+    # The track stops searching the gallery after this many samples (it is "its own" by then).
     max_samples_to_match: int = 20
     min_samples_to_store: int = 3
     bank_size: int = 30
-    # Separacion minima entre muestras del banco (s): evita llenarlo con frames casi iguales.
+    # Minimum spacing between bank samples (s): avoids filling it with near-identical frames.
     sample_min_interval_sec: float = 0.4
     appearance_ema: float = 0.9
     lost_ttl_sec: float = 300.0
@@ -75,7 +75,7 @@ def _l2n(v: np.ndarray) -> np.ndarray:
 
 
 def bank_similarity(query: np.ndarray, bank: List[np.ndarray]) -> float:
-    """Media de las 3 mejores similitudes coseno (robusto a una muestra mala)."""
+    """Mean of the top-3 cosine similarities (robust to one bad sample)."""
     if not bank:
         return -1.0
     sims = np.asarray(bank) @ query
@@ -88,10 +88,10 @@ def centroid(bank: List[np.ndarray]) -> np.ndarray:
 
 
 def add_track_appearance(tr: Track, emb: np.ndarray, stamp_sec: float, cfg: ReIdConfig) -> None:
-    """Llamado al asociar una deteccion YOLO person (con embedding) a un track. La misma
-    caja YOLO se asocia en varios scans seguidos con el mismo embedding (mismo objeto de
-    la cache): solo cuenta la primera vez (si no, gastaba muestras de max_samples_to_match
-    evaluando lo mismo)."""
+    """Called when a YOLO person detection (with embedding) is associated to a track. The same
+    YOLO box is associated over several consecutive scans with the same embedding (same cache
+    object): it only counts the first time (otherwise it used up max_samples_to_match samples
+    evaluating the same thing)."""
     if emb is tr.reid_last_raw:
         return
     tr.reid_last_raw = emb
@@ -118,13 +118,13 @@ class IdentityManager:
         self.cfg = cfg or ReIdConfig()
         self._log = log or (lambda _msg: None)
         self.gallery: Dict[int, GalleryEntry] = {}
-        self._next_key = -1  # claves negativas = entradas sin id (cargadas de disco)
+        self._next_key = -1  # negative keys = entries without an id (loaded from disk)
         self._live: Dict[int, Track] = {}
-        self._pending: Dict[int, _PendingMatch] = {}  # por id(Track)
-        self.names: Dict[int, str] = {}  # track_id vivo -> nombre
+        self._pending: Dict[int, _PendingMatch] = {}  # by id(Track)
+        self.names: Dict[int, str] = {}  # live track_id -> name
         self.events: Deque[dict] = deque(maxlen=50)
 
-    # ─── API publica ─────────────────────────────────────────────────
+    # ─── Public API ──────────────────────────────────────────────────
 
     def enroll(self, tracks: List[Track], track_id: int, name: str) -> bool:
         name = str(name).strip()
@@ -133,7 +133,7 @@ class IdentityManager:
         tr = next((t for t in tracks if t.track_id == int(track_id)), None)
         if tr is None:
             return False
-        # Un nombre = una persona: quitarlo de otros tracks/entradas.
+        # One name = one person: remove it from other tracks/entries.
         for tid, n in list(self.names.items()):
             if n == name and tid != tr.track_id:
                 del self.names[tid]
@@ -145,7 +145,7 @@ class IdentityManager:
                     e.name = None
         self.names[tr.track_id] = name
         tr.reid_name = name
-        self._log(f"ReID: track {tr.track_id} registrado como '{name}'")
+        self._log(f"ReID: track {tr.track_id} enrolled as '{name}'")
         return True
 
     def forget(self, name: str) -> bool:
@@ -165,7 +165,7 @@ class IdentityManager:
         return found
 
     def step(self, tracks: List[Track], now_sec: float) -> List[Tuple[int, int, float]]:
-        """Actualiza galeria y restaura ids. Devuelve [(id_nuevo_anterior, id_restaurado, sim)]."""
+        """Updates the gallery and restores ids. Returns [(previous_new_id, restored_id, sim)]."""
         self._collect_lost(tracks, now_sec)
         self._expire(now_sec)
         restored = self._match_new_tracks(tracks, now_sec)
@@ -176,8 +176,8 @@ class IdentityManager:
         return restored
 
     def pending(self, tr: Track) -> bool:
-        """El track aun puede heredar un id de la galeria (person sin veredicto, con
-        candidatos): quien vaya a usar su id deberia esperar un poco."""
+        """The track may still inherit an id from the gallery (person without a verdict, with
+        candidates): whoever is about to use its id should wait a little."""
         return (str(tr.class_name).lower() == "person" and not tr.reid_matched
                 and tr.reid_samples <= self.cfg.max_samples_to_match
                 and bool(self._candidates(tr)))
@@ -200,7 +200,7 @@ class IdentityManager:
             })
         return out
 
-    # ─── Persistencia (solo entradas con nombre) ─────────────────────
+    # ─── Persistence (named entries only) ────────────────────────────
 
     def save_named(self, path: str) -> int:
         data = {}
@@ -246,7 +246,7 @@ class IdentityManager:
             name = self.names.pop(tid, None)
             if t.reid_bank is None or len(t.reid_bank) < self.cfg.min_samples_to_store:
                 if name:
-                    self._log(f"ReID: '{name}' (id {tid}) perdido sin muestras suficientes")
+                    self._log(f"ReID: '{name}' (id {tid}) lost without enough samples")
                 continue
             self.gallery[tid] = GalleryEntry(
                 track_id=tid,
@@ -274,8 +274,8 @@ class IdentityManager:
     def _candidates(self, tr: Track) -> List[Tuple[int, GalleryEntry]]:
         out = []
         for k, e in self.gallery.items():
-            # Co-visibilidad: si el antiguo se vio en camara despues de que el nuevo apareciera
-            # en camara, son dos personas distintas.
+            # Co-visibility: if the old one was seen by the camera after the new one appeared
+            # in the camera, they are two different people.
             if e.last_rgb_sec > 0.0 and tr.reid_first_rgb_sec > 0.0 and e.last_rgb_sec >= tr.reid_first_rgb_sec:
                 continue
             out.append((k, e))
@@ -288,8 +288,8 @@ class IdentityManager:
         return float(centroid(ea.bank) @ centroid(eb.bank)) >= self.cfg.duplicate_threshold
 
     def _canonical(self, keys: List[int]) -> int:
-        """De varias entradas de la misma persona: la que tiene nombre y, si no, el id
-        mas antiguo (con el que la conocen los demas nodos: conversacion, historial)."""
+        """Among several entries of the same person: the named one or, if none, the oldest
+        id (the one the other nodes know it by: conversation, history)."""
         def rank(k: int):
             e = self.gallery[k]
             return (e.name is None, e.track_id if e.track_id is not None else float("inf"))
@@ -310,7 +310,7 @@ class IdentityManager:
                 continue
             if tr.reid_matched or tr.reid_samples > cfg.max_samples_to_match:
                 continue
-            # Una sola evaluacion por embedding nuevo.
+            # Only one evaluation per new embedding.
             if tr.reid_last_eval_sec >= tr.reid_last_emb_sec:
                 continue
             tr.reid_last_eval_sec = tr.reid_last_emb_sec
@@ -322,16 +322,16 @@ class IdentityManager:
                 ((bank_similarity(q, e.bank), k) for k, e in cands), reverse=True,
             )
             best_sim, best_key = scored[0]
-            # entradas de la misma persona que la mejor: no compiten por el margen
+            # entries of the same person as the best one: they do not compete for the margin
             group = [best_key] + [k for _, k in scored[1:] if self._same_person(best_key, k)]
             second = next((s for s, k in scored[1:] if k not in group), -1.0)
             target = self._canonical(group)
             pend = self._pending.get(id(tr))
-            dup = (f" (misma persona: ids {[self.gallery[k].track_id for k in group]})"
+            dup = (f" (same person: ids {[self.gallery[k].track_id for k in group]})"
                    if len(group) > 1 else "")
             self._log(
-                f"ReID eval: track {tr.track_id} (muestra {tr.reid_samples}) mejor=id "
-                f"{self.gallery[best_key].track_id} sim {best_sim:.2f}, 2o {second:.2f}{dup}"
+                f"ReID eval: track {tr.track_id} (sample {tr.reid_samples}) best=id "
+                f"{self.gallery[best_key].track_id} sim {best_sim:.2f}, 2nd {second:.2f}{dup}"
             )
             if best_sim < cfg.match_threshold or best_sim - second < cfg.match_margin:
                 if pend is not None:
@@ -348,13 +348,13 @@ class IdentityManager:
 
             entry = self.gallery.pop(target)
             claimed.update(group)
-            for k in group:  # los duplicados se funden en la entrada restaurada
+            for k in group:  # duplicates are merged into the restored entry
                 if k == target:
                     continue
                 dup_entry = self.gallery.pop(k)
                 entry.bank = (entry.bank + dup_entry.bank)[-self.cfg.bank_size:]
                 entry.name = entry.name or dup_entry.name
-                self._log(f"ReID: entrada id {dup_entry.track_id} fundida en id {entry.track_id}")
+                self._log(f"ReID: entry id {dup_entry.track_id} merged into id {entry.track_id}")
             del self._pending[id(tr)]
             old_id = tr.track_id
             tr.reid_matched = True
@@ -378,7 +378,7 @@ class IdentityManager:
                 "sim": round(float(best_sim), 3), "name": name,
             })
             self._log(
-                f"ReID: track {old_id} -> ID {tr.track_id}{name_s} recuperado "
-                f"(sim {best_sim:.2f}, 2o {second:.2f}, perdido hace {now_sec - entry.lost_sec:.1f}s)"
+                f"ReID: track {old_id} -> ID {tr.track_id}{name_s} restored "
+                f"(sim {best_sim:.2f}, 2nd {second:.2f}, lost {now_sec - entry.lost_sec:.1f}s ago)"
             )
         return restored

@@ -16,7 +16,7 @@ def quat_multiply_xyzw(
     bz: float,
     bw: float,
 ) -> Tuple[float, float, float, float]:
-    """Hamilton product q_a * q_b (vectores en orden x, y, z, w)."""
+    """Hamilton product q_a * q_b (vectors in x, y, z, w order)."""
     x = aw * bx + ax * bw + ay * bz - az * by
     y = aw * by - ax * bz + ay * bw + az * bx
     z = aw * bz + ax * by - ay * bx + az * bw

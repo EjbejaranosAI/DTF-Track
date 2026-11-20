@@ -40,8 +40,8 @@ def remap_marker_array(
     if result is None:
         if logger is not None and _warned_ref is not None and not _warned_ref[0]:
             logger.warning(
-                f"marker_visualization_frame: sin TF {from_frame!r}->{to_frame!r}, "
-                "se publican markers en tracking_frame"
+                f"marker_visualization_frame: no TF {from_frame!r}->{to_frame!r}, "
+                "publishing markers in tracking_frame"
             )
             _warned_ref[0] = True
         return arr

@@ -1,6 +1,7 @@
 # YOLO ONNX models (robot / CPU)
 
-The TIAGO robot profile uses **ONNX Runtime** instead of PyTorch for YOLO inference.
+Optional CPU backend: with `yolo_backend: onnx` the node runs YOLO with **ONNX Runtime** instead of PyTorch
+(useful without a GPU). The default `robot` profile uses `yolo_backend: ultralytics` on the GPU.
 
 ## Generate weights
 
@@ -13,7 +14,7 @@ python3 scripts/export_yolo_onnx.py --model yolo26n.pt --imgsz 256
 This creates `yolo26n_256.onnx` in this folder. After `colcon build`, it is installed to
 `share/dynamic_tracking/models/yolo/`.
 
-## Robot parameters
+## Parameters (ONNX on CPU)
 
 ```yaml
 yolo_backend: onnx

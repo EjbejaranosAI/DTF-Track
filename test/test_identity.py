@@ -1,11 +1,11 @@
-"""Galeria Re-ID: recuperar el id original tras un ID switch sin robar identidades."""
+"""Re-ID gallery: restore the original id after an ID switch without stealing identities."""
 
 import numpy as np
 
 from dynamic_tracking.identity import IdentityManager, ReIdConfig, add_track_appearance
 from dynamic_tracking.types import Track
 
-# strong_threshold > 1: siempre por aciertos seguidos (lo que prueban la mayoria de tests)
+# strong_threshold > 1: always by consecutive hits (what most tests check)
 CFG = ReIdConfig(confirm_hits=3, min_samples_to_store=3, sample_min_interval_sec=0.0,
                  strong_threshold=1.01)
 
@@ -31,7 +31,7 @@ def _see(tr: Track, emb: np.ndarray, t: float) -> None:
 
 
 def _run_id_switch(mgr, appearance_old, appearance_new, t0=0.0):
-    """Track 1 visto 5 veces, muere, nace el track 2 y se ve 5 veces."""
+    """Track 1 seen 5 times, dies, track 2 is born and is seen 5 times."""
     tracks = [_person(1, t0)]
     t = t0
     for k in range(5):
@@ -85,7 +85,7 @@ def test_needs_consecutive_hits_before_restoring():
 
 
 def test_never_reuses_id_of_live_track():
-    """El track 1 sigue vivo (coasting): el track 2 con la misma ropa no puede tomar su id."""
+    """Track 1 is still alive (coasting): track 2 with the same clothes cannot take its id."""
     mgr = IdentityManager(CFG)
     a = _unit(1)
     old = _person(1, 0.0)
@@ -100,7 +100,7 @@ def test_never_reuses_id_of_live_track():
 
 
 def test_covisible_tracks_are_not_merged():
-    """Si el antiguo se vio en camara despues de aparecer el nuevo, son dos personas."""
+    """If the old one was seen by the camera after the new one appeared, they are two people."""
     mgr = IdentityManager(CFG)
     a = _unit(1)
     old, new = _person(1, 0.0), _person(2, 0.0)
@@ -109,7 +109,7 @@ def test_covisible_tracks_are_not_merged():
         _see(old, _noisy(a, k), t)
         _see(new, _noisy(a, 30 + k), t)
         mgr.step([old, new], t)
-    mgr.step([new], 3.0)  # muere el 1
+    mgr.step([new], 3.0)  # track 1 dies
     for k in range(5):
         _see(new, _noisy(a, 70 + k), 3.5 + 0.5 * k)
         mgr.step([new], 3.5 + 0.5 * k)
@@ -163,7 +163,7 @@ def test_named_gallery_roundtrip(tmp_path):
     path = str(tmp_path / "gallery.json")
     assert mgr.save_named(path) == 1
 
-    # Nueva ejecucion: los ids no significan nada, pero el nombre se recupera.
+    # New run: the ids mean nothing, but the name is restored.
     mgr2 = IdentityManager(CFG)
     assert mgr2.load_named(path, 0.0) == 1
     new = _person(1, 0.0)
@@ -181,9 +181,9 @@ def _entry(tid, base, seeds, lost=0.0):
 
 
 def test_duplicate_entries_of_one_person_do_not_block_recovery():
-    """Prueba 33: la galeria tenia dos entradas de la misma persona (ids 4 y 11, sim
-    0.81 / 0.80): el margen fallaba siempre. Ahora se restaura el id mas antiguo y el
-    duplicado se funde en el."""
+    """Live test 33: the gallery had two entries of the same person (ids 4 and 11, sim
+    0.81 / 0.80): the margin always failed. Now the oldest id is restored and the
+    duplicate is merged into it."""
     mgr = IdentityManager(CFG)
     a = _unit(1)
     mgr.gallery[4] = _entry(4, a, range(10, 20))
@@ -193,12 +193,12 @@ def test_duplicate_entries_of_one_person_do_not_block_recovery():
         _see(new, _noisy(a, 70 + k), 5.5 + k)
         mgr.step([new], 5.5 + k)
     assert new.track_id == 4 and new.reid_restored_from == 17
-    assert not mgr.gallery                       # el 11 se fundió en el 4
+    assert not mgr.gallery                       # 11 was merged into 4
 
 
 def test_two_similar_but_different_people_still_need_margin():
-    """Dos personas distintas (centroides por debajo de duplicate_threshold) a la misma
-    distancia del track nuevo: sigue sin restaurarse (no se roba una identidad)."""
+    """Two different people (centroids below duplicate_threshold) at the same
+    distance from the new track: still not restored (an identity is not stolen)."""
     mgr = IdentityManager(CFG)
     a, b = _unit(1), _unit(2)
     mid = (a + b) / np.linalg.norm(a + b)
@@ -218,8 +218,8 @@ def test_strong_match_restores_with_one_sample_and_pending_until_then():
     mgr.gallery[5] = _entry(5, a, range(10, 20))
     new = _person(10, 5.0)
     new.class_name = "person"
-    assert mgr.pending(new)                         # sin muestras aun: esperando veredicto
-    _see(new, _noisy(a, 80, noise=0.05), 5.5)       # muy parecido (>= 0.85): una basta
+    assert mgr.pending(new)                         # no samples yet: waiting for a verdict
+    _see(new, _noisy(a, 80, noise=0.05), 5.5)       # very similar (>= 0.85): one is enough
     mgr.step([new], 5.5)
     assert new.track_id == 5 and not mgr.pending(new)
     stranger = _person(11, 6.0)

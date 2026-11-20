@@ -1,4 +1,4 @@
-"""Colores por modo de fusion y MarkerArray para RViz."""
+"""Colours per fusion mode and MarkerArray for RViz."""
 
 import math
 from typing import Dict, List, Optional, Tuple
@@ -25,13 +25,13 @@ def is_lidar_track_moving(
 def person_yolo_seen_recent(
     tr: Track, stamp_sec: float, seen_green_sec: float
 ) -> bool:
-    """True si YOLO marco person en este track hace menos de seen_green_sec (mismo reloj que RViz)."""
+    """True if YOLO marked person on this track less than seen_green_sec ago (same clock as RViz)."""
     if seen_green_sec <= 0.0:
         return False
     lr = float(getattr(tr, "last_rgb_person_sec", 0.0))
     if lr <= 0.0:
         return False
-    # header_markers puede usar stamp del /scan y last_rgb el de la imagen: usar |dt| (suele ~0.03–0.05 s).
+    # header_markers may use the /scan stamp and last_rgb the image one: use |dt| (usually ~0.03–0.05 s).
     return abs(float(stamp_sec) - lr) <= float(seen_green_sec)
 
 
@@ -42,15 +42,15 @@ def yolo_stamp_recent(last_sec: float, stamp_sec: float, window_sec: float) -> b
 
 
 def person_yolo_laser_coast(tr: Track, stamp_sec: float, coast_sec: float) -> bool:
-    """YOLO confirmo person alguna vez; mientras viva el ID, coast verde-azulado (solo laser)."""
-    del stamp_sec, coast_sec  # lifetime del track, no ventana temporal
+    """YOLO confirmed person at some point; while the ID lives, teal coast (laser only)."""
+    del stamp_sec, coast_sec  # track lifetime, not a time window
     if str(tr.class_name).lower() != "person":
         return False
     return float(getattr(tr, "last_rgb_person_sec", 0.0)) > 0.0
 
 
 def person_lidar_holding_after_rgb(tr: Track, stamp_sec: float, hold_sec: float) -> bool:
-    """Hubo YOLO person en este track; ultimo update es solo laser (camara perdio vista). Estado naranja."""
+    """This track had a YOLO person; the last update is laser only (camera lost sight). Orange state."""
     if hold_sec <= 0.0:
         return False
     if tr.class_name != "person" or tr.last_update_source != "lidar-only":
@@ -59,7 +59,7 @@ def person_lidar_holding_after_rgb(tr: Track, stamp_sec: float, hold_sec: float)
     return last_rgb > 0.0 and (stamp_sec - last_rgb) <= float(hold_sec)
 
 
-# Alias por compatibilidad con parametros YAML existentes
+# Alias for compatibility with existing YAML parameters
 def person_rgb_coasts_as_cl(tr: Track, stamp_sec: float, coast_sec: float) -> bool:
     return person_lidar_holding_after_rgb(tr, stamp_sec, coast_sec)
 
@@ -83,7 +83,7 @@ def track_color_bgr(
         if person_yolo_laser_coast(tr, float(stamp_sec), float(person_rgb_coast_cl_sec)):
             return marker_color_coast_bgr
         return (220, 90, 40)
-    # YOLO como auxiliar: mismas tonalidades que solo-LiDAR; verde solo con YOLO viendo person.
+    # YOLO as auxiliary: same shades as LiDAR-only; green only while YOLO sees a person.
     if yolo_visual_lidar_parity and str(tr.class_name).lower() not in ("person", "unknown"):
         if is_lidar_track_moving(tr, motion_speed_threshold_mps, motion_accel_threshold_mps2):
             return (180, 110, 60)
@@ -93,7 +93,7 @@ def track_color_bgr(
 
     if tr.class_name == "unknown":
         return (180, 180, 180)
-    # Verde legacy: fusion camara+laser en el mismo ciclo (rayo laser en bbox).
+    # Legacy green: camera+laser fusion in the same cycle (laser ray inside the bbox).
     if tr.last_update_source == "camera+lidar":
         return (0, 255, 0)
     if stamp_sec is not None and person_yolo_laser_coast(
@@ -101,9 +101,9 @@ def track_color_bgr(
     ):
         return marker_color_coast_bgr
     if tr.last_update_source == "camera-only":
-        return (0, 220, 255)  # coral / sin rayo laser en bbox
+        return (0, 220, 255)  # coral / no laser ray in the bbox
     if tr.last_update_source == "lidar-only":
-        # Azul: persona solo laser nunca confirmada por YOLO (dinamico tentativo).
+        # Blue: laser-only person never confirmed by YOLO (tentative dynamic).
         if tr.class_name == "person":
             return (220, 90, 40)  # azul BGR fuerte
         if getattr(tr, "leg_hypothesis_active", False):
@@ -139,7 +139,7 @@ def marker_rgb_from_track(
 
 
 def fusion_tag_ui(last_update_source: str) -> str:
-    """Sin espacios: CL=cam+laser, L=solo laser, C=solo camara."""
+    """No spaces: CL=cam+laser, L=laser only, C=camera only."""
     return {
         "camera+lidar": "CL",
         "lidar-only": "L",
@@ -150,7 +150,7 @@ def fusion_tag_ui(last_update_source: str) -> str:
 def class_tag_ui(
     class_name: str, uncertain_person: bool, motion_dynamic: bool = False
 ) -> str:
-    """Etiqueta corta de clase; person -> dyn / dyn? / dym (movimiento real en mapa)."""
+    """Short class label; person -> dyn / dyn? / dym (real motion on the map)."""
     cn = (class_name or "?").lower()
     if cn == "person":
         if uncertain_person:
@@ -176,7 +176,7 @@ def uncertain_static_lidar_person(
     yolo_visual_lidar_parity: bool = False,
     person_yolo_seen_green_sec: float = 0.5,
 ) -> bool:
-    """True = misma condicion que etiqueta dyn? (persona solo-laser dudosa, p. ej. muro)."""
+    """True = same condition as the dyn? label (doubtful laser-only person, e.g. a wall)."""
     if not marker_uncertain_static_lidar_person:
         return False
     if yolo_visual_lidar_parity and person_yolo_seen_recent(
@@ -207,7 +207,7 @@ def track_label_compact_line(
     yolo_visual_lidar_parity: bool = False,
     person_yolo_seen_green_sec: float = 0.5,
 ) -> str:
-    """RViz label: Person solo con YOLO reciente o en ventana coast; no por un match espurio antiguo."""
+    """RViz label: Person only with recent YOLO or within the coast window; not because of an old spurious match."""
     is_person = str(tr.class_name).lower() == "person"
 
     if yolo_visual_lidar_parity and is_person and stamp_sec is not None:
@@ -264,7 +264,7 @@ def _bbox_yaw_from_velocity(
 
 
 def _wireframe_box_line_points(hx: float, hy: float, hz: float) -> List[Point]:
-    """Aristas de un OBB centrado en el origen del marco del marker (LINE_LIST = pares de vértices)."""
+    """Edges of an OBB centred at the origin of the marker frame (LINE_LIST = vertex pairs)."""
     c = [
         (-hx, -hy, -hz),
         (hx, -hy, -hz),
@@ -373,8 +373,8 @@ def build_track_marker_array(
 ) -> MarkerArray:
     marker_arr = MarkerArray()
 
-    # DELETEALL solo borra el namespace indicado: las cajas estan en dynamic_tracks_*,
-    # no en dynamic_tracking; sin esto RViz acumula miles de markers viejos.
+    # DELETEALL only deletes the given namespace: the boxes are in dynamic_tracks_*,
+    # not in dynamic_tracking; without this RViz piles up thousands of old markers.
     for ns in (
         "dynamic_tracking",
         "dynamic_tracks_bbox",
@@ -398,8 +398,8 @@ def build_track_marker_array(
     for tr in tracks:
         if tr.hits < min_confirmed_hits:
             continue
-        # Spencer filter_visually_confirmed_tracks: person tracks sin RGB
-        # son "tentative" (existen para asociacion interna, pero invisibles).
+        # Spencer filter_visually_confirmed_tracks: person tracks without RGB
+        # are "tentative" (they exist for internal association, but are invisible).
         if require_visual_confirmation and tr.class_name == "person" and tr.last_rgb_person_sec <= 0.0:
             continue
         if (
@@ -439,7 +439,7 @@ def build_track_marker_array(
         ):
             continue
 
-        # Bbox: CUBE solido o LINE_LIST alambrico; pose en el centro con yaw segun velocidad Kalman (mapa).
+        # Bbox: solid CUBE or wireframe LINE_LIST; pose at the centre with yaw from the Kalman velocity (map).
         body = Marker()
         body.header = header
         body.header.frame_id = tracking_frame
@@ -454,8 +454,8 @@ def build_track_marker_array(
             box_xy = float(person_box_size_xy_m)
             box_h = float(person_box_height_m)
         hz_geom = 0.5 * box_h
-        # Solo el alambre suele beneficiarse del yaw; el CUBE cuadrado en XY era identico con q=1 antes.
-        # Aplicar yaw al solido con velocidad ruidosa puede dar sensacion de inestabilidad en RViz.
+        # Only the wireframe usually benefits from the yaw; the square CUBE in XY was identical with q=1 before.
+        # Applying yaw to the solid box with a noisy velocity can look unstable in RViz.
         use_heading = (
             bool(marker_bbox_wireframe) and bool(marker_bbox_use_velocity_heading)
         )
@@ -582,7 +582,7 @@ def build_track_marker_array(
                 trail.lifetime = lt_msg
                 marker_arr.markers.append(trail)
 
-        # Historial: cilindros verticales (Marker no tiene CONE en ROS2); mas viejos = mas pequenos y tenues.
+        # History: vertical cylinders (Marker has no CONE in ROS 2); older = smaller and fainter.
         if publish_track_history_cones:
             ring = getattr(tr, "pose_trail_ring", None)
             if ring is not None and len(ring) >= 2:
@@ -639,7 +639,7 @@ def build_yolo_laser_polar_debug_marker_array(
     z_yolo_m: float = 0.07,
     z_track_m: float = 0.02,
 ) -> MarkerArray:
-    """Rayos en el frame del /scan: hits YOLO (verde) vs (r,theta) de tracks (cian). Depurar fase polar."""
+    """Rays in the /scan frame: YOLO hits (green) vs track (r,theta) (cyan). Debug the polar phase."""
     arr = MarkerArray()
     clear = Marker()
     clear.header = header
@@ -715,7 +715,7 @@ def build_lidar_cluster_marker_array(
     marker_lifetime_sec: float,
     sphere_diameter_m: float = 0.14,
 ) -> MarkerArray:
-    """Esferas cian en (map_x, map_y) de cada cluster LiDAR tras filtros (predicciones del laser en RViz)."""
+    """Cyan spheres at (map_x, map_y) of each LiDAR cluster after filters (laser predictions in RViz)."""
     arr = MarkerArray()
     clear = Marker()
     clear.header.stamp = header.stamp

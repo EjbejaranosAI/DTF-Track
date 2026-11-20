@@ -1,4 +1,4 @@
-# dynamic_tracking — TIAGO Gazebo (sim). Ver docs/TRACKING.md, docs/DRIFT_FIX.md
+# dynamic_tracking — TIAGO Gazebo (sim). See docs/TRACKING.md, docs/DRIFT_FIX.md
 
 dynamic_tracking_node:
   ros__parameters:
@@ -34,7 +34,7 @@ dynamic_tracking_node:
     lidar_qos_depth: 1
     sensor_qos_depth: 10
 
-    # LiDAR: procesado al llegar /scan; sync solo empareja imagen para YOLO (docs/DRIFT_FIX.md)
+    # LiDAR: processed when /scan arrives; sync only pairs the image for YOLO (docs/DRIFT_FIX.md)
     enable_lidar_fusion: true
     sync_image_with_lidar: true
     lidar_track_on_scan: false
@@ -76,7 +76,7 @@ dynamic_tracking_node:
     enable_image_only_assoc_fallback: true
     image_only_assoc_min_iou: 0.18
 
-    # --- Scan verify (presencia; NO mueve la caja — solo evita missed++) ---
+    # --- Scan verify (presence; does NOT move the box — only avoids missed++) ---
     scan_verify_range_tolerance_m: 0.42
     scan_verify_window_deg: 14.0
     scan_verify_require_nearby_cluster: true
@@ -90,7 +90,7 @@ dynamic_tracking_node:
     person_track_leg_snap_max_velocity_mps: 1.0
     person_track_leg_snap_require_spawn_tier_jump_m: 0.55
 
-    # --- Segmentación /scan ---
+    # --- /scan segmentation ---
     lidar_cluster_jump_m: 0.28
     lidar_cluster_pose_mode: "median"
     lidar_min_points_per_segment: 3
@@ -145,7 +145,7 @@ dynamic_tracking_node:
     duplicate_track_max_dist_m: 0.38
     duplicate_track_lidar_only: false
 
-    # --- Dinámico real (etiqueta dym) ---
+    # --- Real dynamic (dym label) ---
     person_dynamic_window_sec: 2.0
     person_dynamic_min_displacement_m: 0.60
     person_dynamic_pose_history_sec: 4.0
@@ -154,7 +154,7 @@ dynamic_tracking_node:
     motion_speed_threshold_mps: 0.06
     motion_accel_threshold_mps2: 0.04
 
-    # --- Filtro costmap Nav2 ---
+    # --- Nav2 costmap filter ---
     map_filter_enable: true
     costmap_topic: "/global_costmap/costmap"
     occupancy_threshold: 253
@@ -162,7 +162,7 @@ dynamic_tracking_node:
     map_filter_unknown_as_free: true
     map_filter_neighbor_radius_cells: 0
 
-    # --- Filtro mapa estático /map ---
+    # --- Static /map filter ---
     static_map_filter_enable: true
     static_map_topic: "/map"
     static_map_occupied_threshold: 65
@@ -189,7 +189,7 @@ dynamic_tracking_node:
     area_filter_zones_file: ""
     area_filter_zones_json: "[]"
 
-    # --- YOLO auxiliar (solo metadata, no mueve Kalman) ---
+    # --- Auxiliary YOLO (metadata only, does not move the Kalman) ---
     yolo_visual_lidar_parity: true
     yolo_auxiliary_reject_in_fov_enable: false
     yolo_auxiliary_reject_in_fov_frames: 8
@@ -226,7 +226,7 @@ dynamic_tracking_node:
     marker_remap_allow_latest_fallback: false
     marker_remap_tf_timeout_sec: 0.0
     marker_remap_stale_tf_cache_sec: 0.75
-    # RViz: >0 suaviza 1-2 ciclos sin publicar (no evita cambio de ID si el track se borra).
+    # RViz: >0 smooths 1-2 cycles without publishing (does not avoid an ID change if the track is deleted).
     marker_lifetime_sec: 0.18
     marker_bbox_alpha: 0.85
     marker_bbox_wireframe: false
@@ -269,14 +269,14 @@ dynamic_tracking_node:
     track_history_alpha_max: 0.52
     track_history_z_m: 0.02
 
-    # --- Blob (opcional; activar en lidar_detectors_enabled) ---
+    # --- Blob (optional; enable in lidar_detectors_enabled) ---
     blob_min_points: 4.0
     blob_max_points: 25.0
     blob_min_width_m: 0.05
     blob_max_width_m: 0.55
     blob_max_range_m: 20.0
 
-    # --- Cámara fallback (legacy; declarados para compat) ---
+    # --- Camera fallback (legacy; declared for compatibility) ---
     enable_camera_map_fallback: true
     camera_only_depth_m: 3.0
     use_depth_for_camera_fallback: true

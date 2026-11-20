@@ -6,7 +6,7 @@ import numpy as np
 
 
 class ConstantVelocityEKF:
-    """Estado [x, y, vx, vy], medicion [x, y]. Dinamica lineal => equivalente a KF de Spencer."""
+    """State [x, y, vx, vy], measurement [x, y]. Linear dynamics => equivalent to Spencer's KF."""
 
     def __init__(
         self,

@@ -35,7 +35,7 @@ def test_track_color_yolo_coast_teal():
 
 
 def test_track_color_yolo_coast_teal_after_long_gap():
-    """Tras confirmar YOLO, verde-azulado mientras viva el ID (sin caducar a los 4 s)."""
+    """After YOLO confirmation, teal while the ID lives (does not expire after 4 s)."""
     tr = _person_track(last_rgb_person_sec=1.0)
     b, g, r = track_color_bgr(
         tr, 0.12, 0.25, stamp_sec=100.0,

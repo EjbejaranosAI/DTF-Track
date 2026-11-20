@@ -139,13 +139,13 @@ class _YoloBackgroundWorker:
         self._is_target = is_target_fn
         self._logger = logger
         self._keep_latest_only = keep_latest_only
-        # Si se da, se llama desde este hilo al terminar cada inferencia
-        # (publica la imagen anotada sin esperar al siguiente frame de camara).
+        # If given, it is called from this thread after each inference
+        # (publishes the annotated image without waiting for the next camera frame).
         self._on_annotated = on_annotated
         self._stage_timer = stage_timer
-        # Re-ID: embeddings OSNet de las cajas person en un hilo propio (reid_bg): YOLO no
-        # espera a la ReID (con la GPU limitada, p.ej. con bateria, un embedding tardaba
-        # ~175 ms y frenaba las detecciones). El pipeline los recoge de `reid_cache` por bbox.
+        # Re-ID: OSNet embeddings of the person boxes on their own thread (reid_bg): YOLO does
+        # not wait for Re-ID (with a limited GPU, e.g. on battery, one embedding took
+        # ~175 ms and slowed down detections). The pipeline picks them up from `reid_cache` by bbox.
         self._reid = reid_embedder
         self._reid_cache = reid_cache
         self._reid_period = max(0.0, float(reid_period_sec))
@@ -215,7 +215,7 @@ class _YoloBackgroundWorker:
         self._reid_period = (1.0 / hz) if hz > 0 else 0.0
 
     def _submit_reid(self, cv_image: np.ndarray, boxes: List[_RawYoloDet]) -> None:
-        """Desde el hilo YOLO: deja el frame al hilo ReID (solo el ultimo) y sigue."""
+        """From the YOLO thread: hand the frame to the Re-ID thread (latest only) and continue."""
         now = time.perf_counter()
         if now - self._reid_last_wall < self._reid_period:
             return
@@ -239,7 +239,7 @@ class _YoloBackgroundWorker:
         person = [tuple(b[:4]) for b in boxes if str(b[4]).lower() == "person"]
         if not person:
             return
-        # Cajas solapadas mezclan dos personas en el crop: no generan embedding.
+        # Overlapping boxes mix two people in the crop: no embedding for them.
         clean = [
             bb for i, bb in enumerate(person)
             if all(
@@ -294,7 +294,7 @@ class _YoloBackgroundWorker:
                 if not self._logged_first_infer:
                     self._logged_first_infer = True
                     self._logger.info(
-                        f"YOLO primera inferencia: {len(boxes)} det ({ms:.0f}ms)"
+                        f"YOLO first inference: {len(boxes)} det ({ms:.0f}ms)"
                     )
             except Exception as exc:
                 self._logger.error(f"YOLO bg worker: {exc}")
@@ -358,14 +358,14 @@ class DynamicTrackingNode(Node):
         dev_lower = str(self.device).lower()
         self._yolo_half = yolo_half_param and ("cuda" in dev_lower or "mps" in dev_lower)
 
-        # ── Re-ID por apariencia (OSNet): recupera el ID original al volver a ver a la persona ──
+        # ── Appearance Re-ID (OSNet): restores the original ID when the person is seen again ──
         self.enable_reid       = p("enable_reid", False, bool) and self.enable_yolo
         self.reid_model        = str(p("reid_model", "osnet_x0_25"))
         self.reid_weights      = str(p("reid_weights", "osnet_x0_25_msmt17.pth"))
         self.reid_rate_hz      = p("reid_rate_hz", 2.0, float)
-        # mientras algun track decide si es alguien de la galeria: mas rapido (veredicto antes)
+        # while some track is deciding whether it is someone from the gallery: faster (earlier verdict)
         self.reid_rate_pending_hz = p("reid_rate_pending_hz", 4.0, float)
-        self.reid_half         = p("reid_half", False, bool)  # fp16 en CUDA (independiente de yolo_half)
+        self.reid_half         = p("reid_half", False, bool)  # fp16 on CUDA (independent of yolo_half)
         self.reid_skip_overlap = p("reid_skip_overlap_iou", 0.3, float)
         self.reid_gallery_file = os.path.expanduser(str(p("reid_gallery_file", "")))
         reid_topic_ns          = str(p("reid_topic_namespace", "/dynamic_tracking/reid")).rstrip("/")
@@ -407,11 +407,11 @@ class DynamicTrackingNode(Node):
         self.use_scan_stamp_tf = p("lidar_fusion_use_scan_stamp_for_tf", True, bool)
         self.use_tf_lidar_ray  = p("use_tf_lidar_ray", True, bool)
         self.use_stamped_tf_for_cluster = p("lidar_cluster_use_stamped_tf", False, bool)
-        # Si la TF del scan aun no ha llegado (odometria ~65 ms tarde), extrapolar la ultima
-        # con la velocidad de la propia TF hasta este maximo (s). 0 = usar la ultima sin corregir.
+        # If the scan TF has not arrived yet (odometry ~65 ms late), extrapolate the latest one
+        # with the TF's own velocity up to this maximum (s). 0 = use the latest without correction.
         self.scan_tf_extrap_max = p("scan_tf_extrapolate_max_sec", 0.0, float)
-        # Une las dos piernas de una persona en una medicion (punto medio) si estan a <= este
-        # valor (m). Quita la alternancia izq/der al caminar. 0 = cada pierna es una medicion.
+        # Merges the two legs of a person into one measurement (midpoint) if they are <= this
+        # value apart (m). Removes the left/right alternation while walking. 0 = each leg is a measurement.
         self.leg_pair_merge_m = p("leg_pair_merge_max_sep_m", 0.0, float)
         self.ray_bbox_bottom   = p("lidar_ray_use_bbox_bottom", True, bool)
         self.cluster_jump_m    = p("lidar_cluster_jump_m", 0.30, float)
@@ -441,7 +441,7 @@ class DynamicTrackingNode(Node):
         self.spawn_min_leg_score = _spawn_score if _spawn_score > 0 else self.leg_hyp_min_score
 
         # ── Marker visualization ──
-        # Suavizado solo visual de la caja (EMA con constante de tiempo; 0 = sin suavizar)
+        # Visual-only smoothing of the box (EMA with a time constant; 0 = no smoothing)
         self.marker_smooth_tau = p("marker_position_smoothing_tau_sec", 0.0, float)
         self.marker_smooth_snap_m = p("marker_position_smoothing_snap_m", 1.0, float)
         self._last_display_sec = 0.0
@@ -911,9 +911,9 @@ class DynamicTrackingNode(Node):
 
         self.det_pub = self.create_publisher(Detection2DArray, detections_topic, 10)
         self.track_pub = self.create_publisher(Detection2DArray, detections_topic + "/tracked", 10)
-        # Subset de /tracked con bbox de imagen real y fresca (dentro del FOV
-        # de la camara) -- para consumidores como vlm_hri que solo pueden
-        # razonar sobre lo que hay en imagen, sin los tracks solo-LiDAR.
+        # Subset of /tracked with a real, fresh image bbox (inside the camera
+        # FOV) -- for consumers such as vlm_hri that can only reason about
+        # what is in the image, without the LiDAR-only tracks.
         self.track_fov_pub = self.create_publisher(Detection2DArray, detections_topic + "/tracked_fov", 10)
         self.marker_pub = self.create_publisher(MarkerArray, self.marker_topic, 10)
         if self._identity is not None:
@@ -975,9 +975,9 @@ class DynamicTrackingNode(Node):
         now = time.perf_counter()
         if self._last_frame_wall is None or (now - self._last_frame_wall) > 10.0:
             self.get_logger().warn(
-                "YOLO inactivo: no hay frames sincronizados imagen+láser en >10 s. "
-                "Prueba sync_image_with_lidar:=false y/o image_qos_reliability:=best_effort "
-                "(TIAGO) o :=reliable según ros2 topic info -v (ver README)."
+                "YOLO idle: no synchronized image+laser frames for >10 s. "
+                "Try sync_image_with_lidar:=false and/or image_qos_reliability:=best_effort "
+                "(TIAGO) or :=reliable depending on ros2 topic info -v (see README)."
             )
 
     # ─── Init helpers ────────────────────────────────────────────────
@@ -1055,7 +1055,7 @@ class DynamicTrackingNode(Node):
             backend.warmup()
         except Exception as exc:
             self.get_logger().warn(f"YOLO warmup: {exc}")
-        self.get_logger().info(f"YOLO listo ({backend.backend_label}): {loaded_src}")
+        self.get_logger().info(f"YOLO ready ({backend.backend_label}): {loaded_src}")
 
     def _init_reid(self) -> None:
         from .reid import EmbeddingCache, ReIdEmbedder
@@ -1070,7 +1070,7 @@ class DynamicTrackingNode(Node):
             )
             self._reid_embedder.warmup()
         except Exception as exc:
-            self.get_logger().error(f"ReID desactivado: no se pudo cargar {w}: {exc}")
+            self.get_logger().error(f"ReID disabled: could not load {w}: {exc}")
             self.enable_reid = False
             self._reid_embedder = None
             return
@@ -1080,17 +1080,17 @@ class DynamicTrackingNode(Node):
             try:
                 n = self._identity.load_named(self.reid_gallery_file, time.time())
                 if n:
-                    self.get_logger().info(f"ReID: {n} identidades cargadas de {self.reid_gallery_file}")
+                    self.get_logger().info(f"ReID: {n} identities loaded from {self.reid_gallery_file}")
             except Exception as exc:
-                self.get_logger().warn(f"ReID: no se pudo leer {self.reid_gallery_file}: {exc}")
+                self.get_logger().warn(f"ReID: could not read {self.reid_gallery_file}: {exc}")
         self.get_logger().info(
-            f"ReID listo ({self.reid_model}, {self._reid_embedder.device}, "
+            f"ReID ready ({self.reid_model}, {self._reid_embedder.device}, "
             f"{'fp16' if self._reid_embedder.half else 'fp32'}, {self.reid_rate_hz:.1f} Hz, "
-            f"umbral {self._reid_cfg.match_threshold:.2f})"
+            f"threshold {self._reid_cfg.match_threshold:.2f})"
         )
 
     def _reid_enroll_cb(self, msg: String) -> None:
-        """'<track_id>:<nombre>' o JSON {"track_id": 3, "name": "Edison"}."""
+        """'<track_id>:<name>' or JSON {"track_id": 3, "name": "Edison"}."""
         raw = str(msg.data).strip()
         try:
             if raw.startswith("{"):
@@ -1100,12 +1100,12 @@ class DynamicTrackingNode(Node):
                 tid_s, name = raw.split(":", 1)
                 tid = int(tid_s)
         except Exception:
-            self.get_logger().warn(f"ReID enroll: formato invalido '{raw}' (usa '3:Edison')")
+            self.get_logger().warn(f"ReID enroll: invalid format '{raw}' (use '3:Edison')")
             return
         with self._tracks_lock:
             ok = self._identity.enroll(self.tracks, tid, name)
         if not ok:
-            self.get_logger().warn(f"ReID enroll: no existe el track {tid}")
+            self.get_logger().warn(f"ReID enroll: track {tid} does not exist")
             return
         self._reid_save()
 
@@ -1113,7 +1113,7 @@ class DynamicTrackingNode(Node):
         name = str(msg.data).strip()
         with self._tracks_lock:
             ok = self._identity.forget(name)
-        self.get_logger().info(f"ReID: '{name}' {'olvidado' if ok else 'no encontrado'}")
+        self.get_logger().info(f"ReID: '{name}' {'forgotten' if ok else 'not found'}")
         self._reid_save()
 
     def _reid_save(self) -> None:
@@ -1123,7 +1123,7 @@ class DynamicTrackingNode(Node):
             with self._tracks_lock:
                 self._identity.save_named(self.reid_gallery_file)
         except Exception as exc:
-            self.get_logger().warn(f"ReID: no se pudo guardar {self.reid_gallery_file}: {exc}")
+            self.get_logger().warn(f"ReID: could not save {self.reid_gallery_file}: {exc}")
 
     def _reid_publish_identities(self, frame_sec: float) -> None:
         payload = {
@@ -1156,9 +1156,9 @@ class DynamicTrackingNode(Node):
             log(f"Tracking frame: {self.tracking_frame}")
             if self.enable_yolo:
                 yolo_mode = (
-                    "sync img+scan (YOLO en _sync_cb)"
+                    "sync img+scan (YOLO in _sync_cb)"
                     if self.sync_img_lidar
-                    else "async imagen (YOLO en cada frame)"
+                    else "async image (YOLO on every frame)"
                 )
                 stride_s = (
                     f", 1/{self._yolo_stride} frames"
@@ -1198,8 +1198,8 @@ class DynamicTrackingNode(Node):
         else:
             yolo_s = f"YOLO {self._yolo_backend_label}" if self.enable_yolo else "LiDAR-only"
             tick = "scan-rate" if self._lidar_track_on_scan else "image-rate"
-            log(f"dynamic_tracking listo — frame={self.tracking_frame}, {yolo_s}, "
-                f"tracking={tick} (debug:=true para logs [POSE])")
+            log(f"dynamic_tracking ready — frame={self.tracking_frame}, {yolo_s}, "
+                f"tracking={tick} (debug:=true for [POSE] logs)")
 
     # ─── Callbacks ───────────────────────────────────────────────────
 
@@ -1426,7 +1426,7 @@ class DynamicTrackingNode(Node):
             tr.update_display(alpha, self.marker_smooth_snap_m)
 
     def _lidar_tracking_tick(self, fusion_stamp, frame_sec: float, wall_start: float) -> None:
-        """Kalman + publicación a frecuencia de /scan (robot async, sin sync imagen)."""
+        """Kalman + publishing at /scan rate (robot async, no image sync)."""
         st = self._stage_timer
         t = time.perf_counter()
         with self._tracks_lock:
@@ -1972,7 +1972,7 @@ class DynamicTrackingNode(Node):
     def _process_image_yolo_light(
         self, cv_image: np.ndarray, header, wall_start: float,
     ) -> None:
-        """Robot async: YOLO + imagen anotada; LiDAR/Kalman/markers en /scan."""
+        """Robot async: YOLO + annotated image; LiDAR/Kalman/markers on /scan."""
         h_img, w_img = cv_image.shape[:2]
         frame_sec = self._stamp_sec(header.stamp)
         stamp_key: StampKey = (int(header.stamp.sec), int(header.stamp.nanosec))
@@ -2049,7 +2049,7 @@ class DynamicTrackingNode(Node):
                 and abs(frame_sec - ls) <= self.yolo_age_sec
             ):
                 assoc, ms = list(lb), max(ms, lm)
-        # Overlay en imagen en vivo: solo cajas del mismo stamp (evita bbox desfasada).
+        # Live image overlay: only boxes with the same stamp (avoids an out-of-date bbox).
         overlay = list(matched) if not self.yolo_annotated_pair else []
         yolo_ms = max(ms, (time.perf_counter() - t0) * 1000.0)
         return assoc, overlay, yolo_ms, stamp_boxes
@@ -2094,7 +2094,7 @@ class DynamicTrackingNode(Node):
             self.cmp_pub.publish(cmsg)
 
     def _update_camera_fov_state(self, stamp, frame_sec) -> Optional[Dict[int, Tuple[float, float]]]:
-        """Proyecta tracks a imagen y marca dentro/fuera del FOV camara."""
+        """Projects tracks into the image and marks them inside/outside the camera FOV."""
         if not (self.aux_proj_tracks and self.tracks):
             return None
         ci = self.latest_camera_info

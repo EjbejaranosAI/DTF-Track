@@ -1,10 +1,10 @@
-"""Re-ID por apariencia (OSNet) para recuperar el ID de una persona al volver a verla.
+"""Appearance Re-ID (OSNet) to recover a person's ID when they are seen again.
 
 OSNet: Zhou et al., "Omni-Scale Feature Learning for Person Re-Identification" (ICCV 2019).
-Arquitectura copiada de deep-person-reid / torchreid (MIT License, Kaiyang Zhou), solo la
-parte de inferencia (sin InstanceNorm ni clasificador). Pesos: kaiyangzhou/osnet en Hugging Face.
+Architecture copied from deep-person-reid / torchreid (MIT License, Kaiyang Zhou), inference
+part only (no InstanceNorm, no classifier). Weights: kaiyangzhou/osnet on Hugging Face.
 
-`torch` se importa de forma perezosa: con `enable_reid:=false` este modulo no carga nada.
+`torch` is imported lazily: with `enable_reid:=false` this module loads nothing.
 """
 
 import threading
@@ -15,7 +15,7 @@ import numpy as np
 
 BBox = Tuple[float, float, float, float]
 
-# Configuraciones OSNet (channels por etapa); todas con layers [2, 2, 2].
+# OSNet configurations (channels per stage); all with layers [2, 2, 2].
 OSNET_CHANNELS = {
     "osnet_x0_25": (16, 64, 96, 128),
     "osnet_x0_5": (32, 128, 192, 256),
@@ -28,7 +28,7 @@ _IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 
 def build_osnet(variant: str = "osnet_x0_25", feature_dim: int = 512):
-    """Devuelve un nn.Module OSNet (modo inferencia: salida = embedding de `feature_dim`)."""
+    """Returns an OSNet nn.Module (inference mode: output = `feature_dim` embedding)."""
     import torch.nn as nn
 
     class ConvLayer(nn.Module):
@@ -138,12 +138,12 @@ def build_osnet(variant: str = "osnet_x0_25", feature_dim: int = 512):
             return self.fc(v)
 
     if variant not in OSNET_CHANNELS:
-        raise ValueError(f"OSNet desconocido '{variant}' (opciones: {sorted(OSNET_CHANNELS)})")
+        raise ValueError(f"Unknown OSNet '{variant}' (options: {sorted(OSNET_CHANNELS)})")
     return OSNet(OSNET_CHANNELS[variant])
 
 
 def load_osnet_state_dict(path: str):
-    """Carga pesos (solo tensores: weights_only=True) y descarta el clasificador de entrenamiento."""
+    """Loads weights (tensors only: weights_only=True) and drops the training classifier."""
     import torch
 
     sd = torch.load(path, map_location="cpu", weights_only=True)
@@ -159,7 +159,7 @@ def load_osnet_state_dict(path: str):
 
 
 class ReIdEmbedder:
-    """Recortes de persona (BGR) -> embeddings L2-normalizados (N, D) en la GPU del YOLO."""
+    """Person crops (BGR) -> L2-normalized embeddings (N, D) on the YOLO GPU."""
 
     def __init__(
         self,
@@ -211,7 +211,7 @@ class ReIdEmbedder:
         return np.ascontiguousarray(batch.transpose(0, 3, 1, 2)), keep
 
     def embed(self, image_bgr: np.ndarray, boxes: Sequence[BBox]) -> Dict[int, np.ndarray]:
-        """Devuelve {indice de caja: embedding}; omite cajas demasiado pequenas."""
+        """Returns {box index: embedding}; skips boxes that are too small."""
         if not boxes:
             return {}
         batch, keep = self._preprocess(image_bgr, boxes)
@@ -228,10 +228,10 @@ class ReIdEmbedder:
 
 
 class EmbeddingCache:
-    """Embeddings por bbox exacta (tupla de floats del detector), compartido entre hilos.
+    """Embeddings by exact bbox (tuple of detector floats), shared between threads.
 
-    El worker YOLO calcula embeddings y los guarda aqui; el pipeline de medidas los busca
-    con la misma tupla bbox que viaja en RawYoloDet (sin cambiar el formato de las cajas).
+    The YOLO worker computes embeddings and stores them here; the measurement pipeline looks them up
+    with the same bbox tuple that travels in RawYoloDet (without changing the box format).
     """
 
     def __init__(self, max_entries: int = 256) -> None:

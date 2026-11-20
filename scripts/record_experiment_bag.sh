@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Graba rosbag2 con inputs + salidas de dynamic_tracking (TIAGO / ROS 2).
+# Records a rosbag2 with the inputs + outputs of dynamic_tracking (TIAGO / ROS 2).
 #
-# Uso interactivo (pregunta experimento, run y etiqueta opcional):
+# Interactive use (asks for experiment, run and an optional label):
 #   ./scripts/record_experiment_bag.sh
 #
-# Uso con argumentos (sin preguntas):
+# Use with arguments (no questions):
 #   ./scripts/record_experiment_bag.sh T1 run01
-#   ./scripts/record_experiment_bag.sh T2 run02 figura8
+#   ./scripts/record_experiment_bag.sh T2 run02 figure8
 #
 # Bag folder (default ~/rosbags/dtf_track). Override:
 #   BAG_ROOT=/other/path ./scripts/record_experiment_bag.sh T1 run01
 #
-# Antes de grabar: dynamic_tracking lanzado, /scan y /detections/tracked con Hz.
+# Before recording: dynamic_tracking running, /scan and /detections/tracked publishing.
 
 set -euo pipefail
 
@@ -19,34 +19,34 @@ ROBOT_ID="${ROBOT_ID:-tiago-pro-13c}"
 BAG_ROOT="${BAG_ROOT:-$HOME/rosbags/dtf_track}"
 QOS_OVERRIDES="${QOS_OVERRIDES:-$BAG_ROOT/qos_overrides.yaml}"
 
-# ─── Catálogo de experimentos (orden sugerido de sesión) ─────────────────
-# Copia SCENARIO + RUN desde aquí al grabar:
+# ─── Experiment catalogue (suggested session order) ──────────────────────
+# Copy SCENARIO + RUN from here when recording:
 #
-#   T1 run01  |  Robot: gira ~360° in situ     |  Persona: estática
-#   T1 run02  |  (mismo guion)
+#   T1 run01  |  Robot: turns ~360° in place   |  Person: static
+#   T1 run02  |  (same script)
 #   T1 run03  |
 #
-#   T2 run01  |  Robot: estático                |  Persona: figura 8
+#   T2 run01  |  Robot: static                 |  Person: figure 8
 #   T2 run02  |
 #   T2 run03  |
 #
-#   T3 run01  |  Robot: sigue / patrulla       |  Persona: camina libre
+#   T3 run01  |  Robot: follows / patrols      |  Person: walks freely
 #   T3 run02  |
 #   T3 run03  |
 #
-#   A2 run01  |  Ablation: spawn max_score      |  escena tipo T3
-#   A4 run01  |  Ablation: TF sin stamp         |  escena tipo T1
-#   A5 run01  |  Ablation: sin YOLO             |  escena tipo T2
+#   A2 run01  |  Ablation: spawn max_score      |  T3-like scene
+#   A4 run01  |  Ablation: TF without stamp     |  T1-like scene
+#   A5 run01  |  Ablation: no YOLO              |  T2-like scene
 #
-# Duración orientativa: T1 60–90 s | T2/T3 90–120 s
+# Suggested duration: T1 60–90 s | T2/T3 90–120 s
 
 declare -A EXP_DESC=(
-  [T1]="Robot gira ~360° in situ | Persona estática (H1 drift)"
-  [T2]="Robot estático | Persona figura 8"
-  [T3]="Robot patrulla/sigue | Persona camina libre"
-  [A2]="Ablación: lidar_spawn_fusion_policy=max_score"
-  [A4]="Ablación: TF sin stamp (drift)"
-  [A5]="Ablación: enable_yolo_detections=false"
+  [T1]="Robot turns ~360° in place | Person static (H1 drift)"
+  [T2]="Robot static | Person figure 8"
+  [T3]="Robot patrols/follows | Person walks freely"
+  [A2]="Ablation: lidar_spawn_fusion_policy=max_score"
+  [A4]="Ablation: TF without stamp (drift)"
+  [A5]="Ablation: enable_yolo_detections=false"
 )
 
 sanitize_tag() {
@@ -57,13 +57,13 @@ sanitize_tag() {
 
 prompt_experiment() {
   echo ""
-  echo "=== Experimentos (orden sugerido) ==="
+  echo "=== Experiments (suggested order) ==="
   for key in T1 T2 T3 A2 A4 A5; do
     printf "  %-4s  %s\n" "$key" "${EXP_DESC[$key]:-}"
   done
   echo ""
   while true; do
-    read -r -p "Experimento [T1]: " ans
+    read -r -p "Experiment [T1]: " ans
     ans="${ans:-T1}"
     ans="$(echo "$ans" | tr '[:lower:]' '[:upper:]')"
     if [[ -n "${EXP_DESC[$ans]+x}" ]]; then
@@ -71,11 +71,11 @@ prompt_experiment() {
       break
     fi
     if [[ "$ans" =~ ^[A-Z0-9][A-Z0-9_-]*$ ]]; then
-      echo "  (experimento custom: $ans)"
+      echo "  (custom experiment: $ans)"
       SCENARIO="$ans"
       break
     fi
-    echo "  Ejemplo: T1, T2, T3, A2, A4, A5"
+    echo "  Example: T1, T2, T3, A2, A4, A5"
   done
 }
 
@@ -87,16 +87,16 @@ prompt_run() {
       RUN_ID="$ans"
       break
     fi
-    echo "  Ejemplo: run01, run02, run03"
+    echo "  Example: run01, run02, run03"
   done
 }
 
 prompt_tag() {
-  read -r -p "Etiqueta corta para el nombre (opcional, Enter = omitir): " ans
+  read -r -p "Short label for the name (optional, Enter = skip): " ans
   TAG="$(sanitize_tag "$ans")"
 }
 
-# ─── Argumentos o prompts ───────────────────────────────────────────────
+# ─── Arguments or prompts ───────────────────────────────────────────────
 ARG_COUNT=$#
 
 if [[ $ARG_COUNT -ge 1 ]]; then
@@ -125,7 +125,7 @@ else
 fi
 OUT_DIR="${BAG_ROOT}/${BAG_NAME}"
 
-# ─── Topics: inputs pipeline + odom (contexto) + salidas ───────────────
+# ─── Topics: pipeline inputs + odom (context) + outputs ─────────────────
 TOPICS=(
   /scan
   /tf
@@ -151,18 +151,18 @@ if [[ ! -f "$QOS_OVERRIDES" ]]; then
   history: keep_last
   depth: 10
 EOF
-  echo "Creado QoS overrides: $QOS_OVERRIDES"
+  echo "Created QoS overrides: $QOS_OVERRIDES"
 fi
 
 echo ""
-echo "=== Resumen ==="
+echo "=== Summary ==="
 echo "  Robot:      $ROBOT_ID"
-echo "  Escenario:  $SCENARIO"
+echo "  Scenario:   $SCENARIO"
 if [[ -n "${EXP_DESC[$SCENARIO]+x}" ]]; then
-  echo "  Guion:      ${EXP_DESC[$SCENARIO]}"
+  echo "  Script:     ${EXP_DESC[$SCENARIO]}"
 fi
 echo "  Run:        $RUN_ID"
-[[ -n "$TAG" ]] && echo "  Etiqueta:   $TAG"
+[[ -n "$TAG" ]] && echo "  Label:      $TAG"
 echo "  Bag:        ${OUT_DIR}/${BAG_NAME}"
 echo ""
 
@@ -170,7 +170,7 @@ echo "=== Pre-flight ==="
 missing=0
 for t in /scan /detections/tracked; do
   if ! ros2 topic list 2>/dev/null | grep -qx "$t"; then
-    echo "  WARN: $t no visible"
+    echo "  WARN: $t not visible"
     missing=1
   fi
 done
@@ -180,9 +180,9 @@ fi
 
 if ros2 node list 2>/dev/null | grep -q dynamic_tracking_node; then
   ros2 param dump /dynamic_tracking_node > "${OUT_DIR}/params_${BAG_NAME}.yaml" 2>/dev/null || true
-  echo "  Params guardados en ${OUT_DIR}/params_${BAG_NAME}.yaml"
+  echo "  Params saved to ${OUT_DIR}/params_${BAG_NAME}.yaml"
 else
-  echo "  WARN: dynamic_tracking_node no detectado — params no volcados"
+  echo "  WARN: dynamic_tracking_node not found — params not dumped"
 fi
 
 {
@@ -195,16 +195,16 @@ fi
   echo "topics: ${TOPICS[*]}"
 } > "${OUT_DIR}/README_${BAG_NAME}.txt"
 
-read -r -p "Pulsa Enter para empezar a grabar (Ctrl+C para parar la grabación)..." _
+read -r -p "Press Enter to start recording (Ctrl+C to stop)..." _
 
 echo ""
-echo "=== Grabando ==="
+echo "=== Recording ==="
 ros2 bag record \
   -o "${OUT_DIR}/${BAG_NAME}" \
   --qos-profile-overrides-path "$QOS_OVERRIDES" \
   "${TOPICS[@]}"
 
 echo ""
-echo "=== Bag guardado ==="
+echo "=== Bag saved ==="
 ros2 bag info "${OUT_DIR}/${BAG_NAME}" || true
-echo "Notas: ${OUT_DIR}/README_${BAG_NAME}.txt"
+echo "Notes: ${OUT_DIR}/README_${BAG_NAME}.txt"

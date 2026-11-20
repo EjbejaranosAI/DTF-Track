@@ -1,54 +1,54 @@
-# Tracking (Kalman + asociación) — `dynamic_tracking`
+# Tracking (Kalman + association) — `dynamic_tracking`
 
-Referencia: **Spencer** `srl_nearest_neighbor_tracker` en `old_spencer/`, launches en `example/iri_spencer_tracker_launch/`.
+Reference: **Spencer** `srl_nearest_neighbor_tracker` in `old_spencer/`, launches in `example/iri_spencer_tracker_launch/`.
 
-## Diseño 360° (láser primero)
+## 360° design (laser first)
 
-1. **Detección** (`lidar_detection/`): segmentos → fusión (`require_two`, etc.) → clusters en `map`.
-2. **Tracking** (`track_pipeline.update_tracks`): Kalman 4D + Hungarian + verificación.
-3. **Confirmación** (`apply_yolo_auxiliary_person_confirmation`): YOLO solo metadatos (color, bbox), **sin** `correct()` en persona.
+1. **Detection** (`lidar_detection/`): segments → fusion (`require_two`, etc.) → clusters in `map`.
+2. **Tracking** (`track_pipeline.update_tracks`): 4D Kalman + Hungarian + verification.
+3. **Confirmation** (`apply_yolo_auxiliary_person_confirmation`): YOLO adds metadata only (colour, bbox), **no** `correct()` on persons.
 
-## Ciclo por frame (orden)
+## Per-frame cycle (order)
 
-| Paso | Qué hace |
+| Step | What it does |
 |------|----------|
-| 1 | `predict(dt)` — velocidad constante; `dt` del stamp del `/scan` (cap `kalman_predict_dt_cap_sec`) |
-| 2 | Asociación LiDAR (Hungarian): fase 1 high-score → 1b suelo laxo → fase 2 resto |
-| 3 | `correct(x,y)` solo con cluster láser emparejado |
-| 4 | Spawn + `lidar_spawn_confirm_frames` (Logic Initiator simplificado) |
-| 5 | **Scan verify** (Spencer): sin cluster, ¿hay retorno en `/scan` en (r,θ) esperado? → mantiene track, **no** mueve Kalman |
-| 6 | FOV: en FOV sin cluster ni verify → `missed_frames` (con debounce); fuera FOV → `consecutive_occlusions` |
-| 7 | `occluded_update()` si no hubo medición |
-| 8 | Poda por `missed` / oclusiones; dedup mapa; YOLO auxiliar |
+| 1 | `predict(dt)` — constant velocity; `dt` from the `/scan` stamp (cap `kalman_predict_dt_cap_sec`) |
+| 2 | LiDAR association (Hungarian): phase 1 high-score → 1b loose floor → phase 2 the rest |
+| 3 | `correct(x,y)` only with a matched laser cluster |
+| 4 | Spawn + `lidar_spawn_confirm_frames` (simplified Logic Initiator) |
+| 5 | **Scan verify** (Spencer): no cluster — is there a `/scan` return at the expected (r,θ)? → keeps the track, does **not** move the Kalman |
+| 6 | FOV: inside the FOV with no cluster or verify → `missed_frames` (with debounce); outside the FOV → `consecutive_occlusions` |
+| 7 | `occluded_update()` if there was no measurement |
+| 8 | Pruning by `missed` / occlusions; map dedup; auxiliary YOLO |
 
-## Verificación en el tracker (evitar FP y desapariciones)
+## Verification in the tracker (avoid FPs and disappearances)
 
-| Mecanismo | Anti-FP | Anti-desaparición |
+| Mechanism | Anti-FP | Anti-disappearance |
 |-----------|---------|-------------------|
-| **Fusión `require_two`** | Menos clusters espurios | Puede faltar 1 frame → debounce |
-| **Filtros mapa/costmap** | Antes del tracker | — |
-| **`lidar_spawn_confirm_frames`** | No abre track al primer blip | Retraso spawn ~2 frames |
-| **`use_mahalanobis_lidar: true`** | Gate χ²; no empareja saltos raros | Re-asocia tras oclusión (cov crece) |
-| **`scan_verify_*`** | Puede mantener FP en muro (rayo en pared) | Persona quieta sin cluster ese frame |
-| **`person_missed_debounce_frames`** | — | 1–2 frames sin detección no borran |
-| **`max_occlusions_*`** | — | Persona detrás del robot (360°) |
-| **`person_lidar_only_max_missed_frames`** | — | Track sin YOLO aguanta ~88 ciclos |
-| **YOLO auxiliar** | No crea posición | Confirma clase / verde |
+| **`require_two` fusion** | Fewer spurious clusters | One frame may be missing → debounce |
+| **Map/costmap filters** | Before the tracker | — |
+| **`lidar_spawn_confirm_frames`** | Does not open a track on the first blip | ~2 frame spawn delay |
+| **`use_mahalanobis_lidar: true`** | χ² gate; odd jumps are not matched | Re-associates after occlusion (covariance grows) |
+| **`scan_verify_*`** | Can keep a FP on a wall (ray hits the wall) | Still person without a cluster that frame |
+| **`person_missed_debounce_frames`** | — | 1–2 frames without detection do not delete |
+| **`max_occlusions_*`** | — | Person behind the robot (360°) |
+| **`person_lidar_only_max_missed_frames`** | — | A track without YOLO survives ~88 cycles |
+| **Auxiliary YOLO** | Does not create positions | Confirms class / green |
 
-## Spencer vs nosotros
+## Spencer vs us
 
-| Spencer NNT | Nosotros |
+| Spencer NNT | Us |
 |-------------|----------|
-| Nodo separado, observaciones `DetectedPerson` | Mismo nodo: segmentación + track |
-| `world_frame` típ. `odom` | `tracking_frame` típ. `map` |
-| Occlusion manager **antes** del Hungarian | FOV binario + `consecutive_occlusions` |
-| Logic Initiator (N scans, velocidad) | `PendingLidarSpawn` + `confirm_frames` |
-| EKF + Mahalanobis en asociación | OpenCV Kalman + Mahalanobis opcional |
+| Separate node, `DetectedPerson` observations | Same node: segmentation + tracking |
+| `world_frame` typically `odom` | `tracking_frame` typically `map` |
+| Occlusion manager **before** the Hungarian | Binary FOV + `consecutive_occlusions` |
+| Logic Initiator (N scans, velocity) | `PendingLidarSpawn` + `confirm_frames` |
+| EKF + Mahalanobis in association | OpenCV Kalman + optional Mahalanobis |
 | `updateOccludedTrack` | `occluded_update()` |
-| Low-confidence laser recovery | No (equivalente: fase 1b + verify) |
-| `filter_tracks.launch` post-filtro | RViz / `require_visual_confirmation` |
+| Low-confidence laser recovery | No (equivalent: phase 1b + verify) |
+| `filter_tracks.launch` post-filter | RViz / `require_visual_confirmation` |
 
-## Parámetros clave (`dynamic_tracking_params.yaml`)
+## Key parameters (`dynamic_tracking_params.yaml`)
 
 ```yaml
 use_mahalanobis_lidar: true
@@ -63,19 +63,19 @@ lidar_spawn_confirm_frames: 2
 tracking_min_confirmed_hits: 2
 ```
 
-## Síntomas y ajuste
+## Symptoms and tuning
 
-| Síntoma | Prueba |
+| Symptom | Try |
 |---------|--------|
-| Desaparecen con persona visible | Subir `person_missed_debounce_frames` (3), `scan_verify_range_tolerance_m`, `tracking_person_lidar_assoc_cost_threshold` |
-| Caja se mueve (robot quieto) | Jitter cluster + AMCL en `map`; probar `tracking_frame: odom` |
-| FP en muro persisten | `require_two`, mapa, subir `lidar_spawn_person_min_leg_score`; bajar `scan_verify` tolerancia |
-| Parpadeo IDs / nuevo ID al re-detectar | `person_missed_debounce_frames: 2`, `person_lidar_only_max_missed_frames: 22–28`, `scan_verify_*` un poco mas laxo, `tracking_person_lidar_assoc_cost_threshold` ~1.25–1.35 |
-| Dos cajas misma persona (p. ej. ID 9+12) | `person_track_map_merge_lidar_only: false`, IoU ~0.18 |
-| Caja salta al girar robot | `person_lidar_max_correction_jump_m: 0.55` |
-| Caja deriva con robot quieto | `person_static_zero_velocity_speed_m: 0.08` |
+| Tracks disappear while the person is visible | Raise `person_missed_debounce_frames` (3), `scan_verify_range_tolerance_m`, `tracking_person_lidar_assoc_cost_threshold` |
+| Box moves (robot still) | Cluster jitter + AMCL in `map`; try `tracking_frame: odom` |
+| FPs on walls persist | `require_two`, map, raise `lidar_spawn_person_min_leg_score`; lower the `scan_verify` tolerance |
+| ID flicker / new ID on re-detection | `person_missed_debounce_frames: 2`, `person_lidar_only_max_missed_frames: 22–28`, slightly looser `scan_verify_*`, `tracking_person_lidar_assoc_cost_threshold` ~1.25–1.35 |
+| Two boxes on the same person (e.g. ID 9+12) | `person_track_map_merge_lidar_only: false`, IoU ~0.18 |
+| Box jumps when the robot turns | `person_lidar_max_correction_jump_m: 0.55` |
+| Box drifts with the robot still | `person_static_zero_velocity_speed_m: 0.08` |
 
-## Referencias en `example/`
+## References in `example/`
 
-- **`iri_spencer_tracker_launch`**: relay sensores + `freiburg_people_tracking` (detección fusionada + NNT + filtros).
-- **`smart_track`**: Kalman 3D con `N_meas` / covarianza para confirmar track (drones); idea similar a `tracking_min_confirmed_hits` + initiator.
+- **`iri_spencer_tracker_launch`**: sensor relay + `freiburg_people_tracking` (fused detection + NNT + filters).
+- **`smart_track`**: 3D Kalman with `N_meas` / covariance to confirm a track (drones); similar idea to `tracking_min_confirmed_hits` + initiator.

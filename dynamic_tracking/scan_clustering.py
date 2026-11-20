@@ -1,12 +1,12 @@
-"""LaserScan -> clusters en frame de tracking (Spencer parity).
+"""LaserScan -> clusters in the tracking frame (Spencer parity).
 
-Alineado con old_spencer/spencer_people_tracking:
-  - Segmentacion jump-distance (srl_laser_segmentation).
-  - Filtros: min/max puntos por segmento, distancia media al sensor, anchura minima opcional.
-  - Pose publicada: mediana cartesiana x,y por separado (use_median_for_pose en srl_laser_detectors).
-  - Clasificador RF opcional (random_forest_detector.cpp): solo FOREGROUND si spencer_rf_only_positive.
+Aligned with old_spencer/spencer_people_tracking:
+  - Jump-distance segmentation (srl_laser_segmentation).
+  - Filters: min/max points per segment, mean distance to the sensor, optional minimum width.
+  - Published pose: cartesian median of x and y separately (use_median_for_pose in srl_laser_detectors).
+  - Optional RF classifier (random_forest_detector.cpp): FOREGROUND only if spencer_rf_only_positive.
 
-La fusion con mapa (costmap, /map estatico) y el tracking Kalman estan en dynamic_tracking_node / track_pipeline.
+Map fusion (costmap, static /map) and Kalman tracking live in dynamic_tracking_node / track_pipeline.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from .lidar_detection.types import LidarExtractDebugStats  # noqa: F401
 
 
 def _cluster_points_to_xy(cluster: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
-    """(angle_rad, range_m) -> (x,y) en frame del laser (mismo convenio que el resto del nodo)."""
+    """(angle_rad, range_m) -> (x,y) in the laser frame (same convention as the rest of the node)."""
     return [(r * math.cos(a), r * math.sin(a)) for a, r in cluster]
 
 
@@ -39,10 +39,10 @@ def cluster_pose_laser_xy(
     cluster: List[Tuple[float, float]],
     pose_mode: str,
 ) -> Tuple[float, float, float]:
-    """Pose 2D del cluster en frame laser + distancia al origen.
+    """2D cluster pose in the laser frame + distance to the origin.
 
-    - median: mediana de x y de y por separado (srl_laser_detectors, use_median_for_pose).
-    - closest: punto del haz con rango minimo (comportamiento antiguo del paquete).
+    - median: median of x and of y separately (srl_laser_detectors, use_median_for_pose).
+    - closest: beam point with the minimum range (old behaviour of the package).
     """
     if not cluster:
         return 0.0, 0.0, 0.0
@@ -72,7 +72,7 @@ def spencer_style_segment_prefilter(
     max_mean_range_m: float,
     min_segment_width_m: float,
 ) -> bool:
-    """Replica filtros de srl_laser_segmentation/ros_interface (min/max puntos, distancia media, anchura)."""
+    """Replicates the srl_laser_segmentation/ros_interface filters (min/max points, mean distance, width)."""
     n = len(cluster)
     if n < min_points:
         return False
@@ -95,7 +95,7 @@ def spencer_style_segment_prefilter(
 
 @dataclass
 class LegHeuristicParams:
-    """Heuristica 2D tipo piernas (sin ML): cluster angular + cuerda + rango plano."""
+    """2D leg-like heuristic (no ML): angular cluster + chord + flat range."""
 
     enabled: bool = True
     min_span_deg: float = 2.5
@@ -106,7 +106,7 @@ class LegHeuristicParams:
 
 
 def _trapezoid_01(x: float, a: float, b: float, c: float, d: float) -> float:
-    """1 en [b,c], rampas en [a,b] y [c,d]; fuera de [a,d] es 0."""
+    """1 in [b,c], ramps on [a,b] and [c,d]; 0 outside [a,d]."""
     if x <= a or x >= d:
         return 0.0
     if x < b:
@@ -117,7 +117,7 @@ def _trapezoid_01(x: float, a: float, b: float, c: float, d: float) -> float:
 
 
 def _bimodal_range_boost(cluster: List[Tuple[float, float]]) -> float:
-    """Dos grupos de rango similares separados por un salto (dos piernas)."""
+    """Two groups of similar range separated by a jump (two legs)."""
     if len(cluster) < 5:
         return 0.0
     rs = sorted(c[1] for c in cluster)
@@ -145,8 +145,8 @@ def _bimodal_range_boost(cluster: List[Tuple[float, float]]) -> float:
 
 
 def _linearity_residual(cluster: List[Tuple[float, float]]) -> float:
-    """Residual normalizado de ajuste lineal LS en coordenadas cartesianas.
-    Bajo = lineal (pared); alto = curvado/circular (pierna).
+    """Normalized residual of a least-squares line fit in cartesian coordinates.
+    Low = linear (wall); high = curved/circular (leg).
     Spencer Feature10."""
     n = len(cluster)
     if n < 3:
@@ -169,8 +169,8 @@ def _linearity_residual(cluster: List[Tuple[float, float]]) -> float:
 
 
 def _compactness(cluster: List[Tuple[float, float]]) -> float:
-    """Ratio de area/perimetro; alto = compacto/circular (pierna).
-    Inspirado en Spencer Feature06 (circle fit) y Feature09 (aspect ratio)."""
+    """Area/perimeter ratio; high = compact/circular (leg).
+    Inspired by Spencer Feature06 (circle fit) and Feature09 (aspect ratio)."""
     n = len(cluster)
     if n < 3:
         return 0.0
@@ -189,17 +189,17 @@ def compute_leg_candidate_score(
     cluster: List[Tuple[float, float]],
     params: LegHeuristicParams,
 ) -> float:
-    """Score multi-feature inspirado en Spencer (RF/AdaBoost sobre ~50 features).
+    """Multi-feature score inspired by Spencer (RF/AdaBoost on ~50 features).
 
-    Features usadas:
+    Features used:
       1. Span angular + chord (original)
       2. Range spread ratio (original)
-      3. Point count (Spencer F01) — piernas: 3-20 puntos
-      4. Linearity (Spencer F10) — paredes lineales, piernas curvadas
-      5. Compactness (Spencer F06/F09) — piernas son compactas/circulares
-      6. Width (Spencer F05) — piernas: 0.06-0.55m
+      3. Point count (Spencer F01) — legs: 3-20 points
+      4. Linearity (Spencer F10) — walls are linear, legs curved
+      5. Compactness (Spencer F06/F09) — legs are compact/circular
+      6. Width (Spencer F05) — legs: 0.06-0.55m
       7. Mean consecutive range diff (Spencer F02)
-      8. Bimodal range boost (dos piernas)
+      8. Bimodal range boost (two legs)
     """
     if not params.enabled or len(cluster) < 2:
         return 0.0
@@ -214,7 +214,7 @@ def compute_leg_candidate_score(
         return 0.0
     chord = 2.0 * mean_r * math.sin(0.5 * span)
 
-    # F1: span angular
+    # F1: angular span
     span_ok = _trapezoid_01(
         span_deg,
         max(0.5, params.min_span_deg - 1.5),
@@ -236,15 +236,15 @@ def compute_leg_candidate_score(
         params.max_chord_m + 0.12,
     )
 
-    # F4: point count (Spencer F01) — piernas: 3-20 puntos a distancias típicas
+    # F4: point count (Spencer F01) — legs: 3-20 points at typical distances
     expected_pts = max(3, min(25, 12.0 / max(mean_r, 0.5)))
     npts_ok = _trapezoid_01(float(n), 2.0, 3.0, expected_pts * 1.5, expected_pts * 3.0)
 
-    # F5: linearity (Spencer F10) — paredes tienen residual bajo, piernas alto
+    # F5: linearity (Spencer F10) — walls have a low residual, legs a high one
     lin_res = _linearity_residual(cluster)
     linearity_ok = min(1.0, lin_res * 8.0)
 
-    # F6: compactness (Spencer F06/F09) — piernas son compactas
+    # F6: compactness (Spencer F06/F09) — legs are compact
     compact = _compactness(cluster)
     compact_ok = _trapezoid_01(compact, 0.15, 0.3, 1.0, 1.01)
 
@@ -256,7 +256,7 @@ def compute_leg_candidate_score(
     else:
         diff_ok = 0.5
 
-    # Weighted combination (pseudo-AdaBoost: pesos manuales por importancia)
+    # Weighted combination (pseudo-AdaBoost: manual weights by importance)
     score = (
         0.20 * span_ok
         + 0.10 * flat_ok
@@ -269,16 +269,16 @@ def compute_leg_candidate_score(
     boost = _bimodal_range_boost(cluster)
     score = min(1.0, score + boost)
 
-    # Penalizaciones fuertes (veto)
+    # Strong penalties (veto)
     if span_deg > 16.0 and boost < 0.06:
         score = min(score, 0.40)
     beams_per_rad = (n / max(span, 0.02)) if span > 0 else 0.0
     if span_deg > 10.0 and beams_per_rad > 120.0:
         score *= 0.30
-    # Muchos puntos + muy lineal = pared
+    # Many points + very linear = wall
     if n > 15 and lin_res < 0.01:
         score *= 0.25
-    # Muy lejos: penalizacion suave (6m ya no castiga; piernas a 3–5m suelen quedar >0.55).
+    # Very far: soft penalty (6 m is no longer penalized; legs at 3–5 m usually stay >0.55).
     if mean_r > 10.0:
         score *= 0.45
     elif mean_r > 8.0:
@@ -319,7 +319,7 @@ def is_track_in_lidar_fov(
 
 
 def _shortest_angle_diff_rad(a: float, b: float) -> float:
-    """Diferencia a-b en (-pi, pi] (robusto a saltos del scan)."""
+    """Difference a-b in (-pi, pi] (robust to scan wrap-around)."""
     d = (a - b + math.pi) % (2.0 * math.pi) - math.pi
     return d
 
@@ -342,7 +342,7 @@ def _angle_to_index_range(
 def scan_window_best_range(
     scan: LaserScan, lidar_window_rad: float, center_angle: float
 ) -> Optional[Tuple[float, float]]:
-    """Menor rango en ventana angular alrededor de center_angle (index-based)."""
+    """Smallest range in an angular window around center_angle (index-based)."""
     if scan.angle_increment == 0.0 or not scan.ranges:
         return None
     lo, hi = _angle_to_index_range(scan, center_angle, lidar_window_rad * 0.5)
@@ -375,9 +375,9 @@ def verify_track_in_scan(
     min_range_m: float = 0.25,
     max_range_m: float = 8.0,
 ) -> bool:
-    """Verifica si el scan tiene un retorno donde esperamos ver un track.
+    """Checks whether the scan has a return where we expect to see a track.
 
-    O(window) en vez de O(N) gracias al cálculo de índice directo.
+    O(window) instead of O(N) thanks to direct index computation.
     """
     cos_y = math.cos(tf_yaw)
     sin_y = math.sin(tf_yaw)

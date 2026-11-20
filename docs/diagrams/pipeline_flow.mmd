@@ -8,30 +8,30 @@
   'fontSize': '14px'
 }}}%%
 flowchart TB
-  subgraph IN["Entrada sensores"]
+  subgraph IN["Sensor input"]
     direction LR
     IMG["Image"]
     SCN["LaserScan /scan"]
   end
 
-  SYN["ApproximateTime sync<br/>imagen + laser"]
+  SYN["ApproximateTime sync<br/>image + laser"]
 
   subgraph LID["Pipeline LiDAR — dynamic_tracking_node"]
     direction TB
     SEG["segment_scan<br/>jump-distance 1x"]
-    DET["Detectores paralelos<br/>RF · AdaBoost · heuristica · blob"]
+    DET["Parallel detectors<br/>RF · AdaBoost · heuristic · blob"]
     FUS["fusion<br/>max_score / require_two"]
-    FLT["Filtros<br/>/map + costmap"]
-    TRK["Kalman + Hungarian<br/>posicion solo laser"]
+    FLT["Filters<br/>/map + costmap"]
+    TRK["Kalman + Hungarian<br/>laser-only position"]
   end
 
-  subgraph YO["YOLO auxiliar — metadatos"]
+  subgraph YO["Auxiliary YOLO — metadata"]
     direction TB
     YD["YOLO background thread"]
-    YA["confirmacion person<br/>bbox · color RViz"]
+    YA["person confirmation<br/>bbox · RViz colour"]
   end
 
-  subgraph OUT["Salidas ROS"]
+  subgraph OUT["ROS outputs"]
     direction LR
     MK["/dynamic_tracks_markers<br/>tracks RViz"]
     DT["/detections/tracked"]

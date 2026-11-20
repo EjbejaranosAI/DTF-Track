@@ -1,7 +1,7 @@
-"""Asociacion Hungarian (global optimal) mediciones <-> tracks.
+"""Hungarian (globally optimal) association of measurements <-> tracks.
 
-Usa scipy.optimize.linear_sum_assignment (Jonker-Volgenant O(n³)).
-Fallback a greedy sort si scipy no esta disponible.
+Uses scipy.optimize.linear_sum_assignment (Jonker-Volgenant O(n³)).
+Falls back to a greedy sort if scipy is not available.
 """
 
 import math
@@ -19,7 +19,7 @@ except Exception:
 
 
 def assoc_class_key(class_name: str) -> int:
-    """Hash estable en el proceso para emparejar clase YOLO <-> track."""
+    """Process-stable hash to match YOLO class <-> track."""
     return hash(str(class_name).strip().lower())
 
 
@@ -44,7 +44,7 @@ def assign_measurements(
     pair_allowed: Optional[Callable[[Track, float, float], bool]] = None,
     use_mahalanobis: bool = False,
 ) -> Tuple[List[Tuple[int, int]], List[int], List[int]]:
-    """Asociacion optima global (Hungarian) o greedy con gating.
+    """Globally optimal (Hungarian) or greedy association with gating.
 
     measurements: (map_x, map_y, optional class hash).
     use_mahalanobis: if True, use Mahalanobis distance with chi² gate (Spencer).
@@ -99,7 +99,7 @@ def assign_measurements(
 
 
 def _greedy_assignment(cost_matrix: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """Fallback greedy si scipy no esta disponible."""
+    """Greedy fallback if scipy is not available."""
     n_rows, n_cols = cost_matrix.shape
     pairs = []
     for r in range(n_rows):

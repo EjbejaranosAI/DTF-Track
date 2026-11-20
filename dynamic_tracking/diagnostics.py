@@ -165,7 +165,7 @@ class PoseDebugLogger:
             for tr in sorted(persons, key=lambda t: t.track_id):
                 mx, my = tr.state()
                 tag = "OK" if tr.hits >= min_confirmed_hits else f"tent {tr.hits}/{min_confirmed_hits}"
-                lines.append(f"[POSE] id={tr.track_id} map=({mx:+.3f},{my:+.3f}) {tag} (sin TF robot)")
+                lines.append(f"[POSE] id={tr.track_id} map=({mx:+.3f},{my:+.3f}) {tag} (no robot TF)")
         else:
             rtx, rty, ryaw = robot_map_tf
             for tr in sorted(persons, key=lambda t: t.track_id):
@@ -193,14 +193,14 @@ class PoseDebugLogger:
                 else:
                     lines.append(f"[POSE]   cl#{i} map=({mx:+.3f},{my:+.3f}) leg={cl.leg_candidate_score:.2f}")
             if len(clusters) > 4:
-                lines.append(f"[POSE]   ... +{len(clusters) - 4} más")
+                lines.append(f"[POSE]   ... +{len(clusters) - 4} more")
 
         for line in lines:
             logger.info(line)
 
 
 class PersonTrackLogger:
-    """Log compacto de personas trackeadas (id + posicion)."""
+    """Compact log of tracked persons (id + position)."""
 
     def __init__(self, log_interval_sec: float) -> None:
         self.interval = log_interval_sec
@@ -349,8 +349,8 @@ class LidarDiagnostics:
                 else:
                     parts.append(
                         f"| hint: no track spawn — max_score<{spawn_min_leg_score:.2f} "
-                        f"(RF Gazebo ~0.05–0.15; con only_positive=false usa max(rf,heuristica)); "
-                        f"baja lidar_spawn_person_min_leg_score o revisa log LiDAR extract"
+                        f"(RF Gazebo ~0.05–0.15; with only_positive=false uses max(rf,heuristic)); "
+                        f"lower lidar_spawn_person_min_leg_score or check the LiDAR extract log"
                     )
             else:
                 parts.append(
@@ -477,12 +477,12 @@ class SpencerExtractDiagnostics:
             and self._max_heur >= spawn_min_leg_score - 1e-6
         ):
             parts.append(
-                "| hint: heuristica OK pero score final bajo — reinicia tras rebuild "
-                "(max(rf,heur) con only_positive=false)"
+                "| hint: heuristic OK but final score low — restart after rebuild "
+                "(max(rf,heur) with only_positive=false)"
             )
         elif self._max_rf < 0.2 and self._max_heur < 0.35:
             parts.append(
-                "| hint: RF y heuristica bajos — revisa lidar_cluster_jump_m, piernas en rango, o desactiva RF"
+                "| hint: RF and heuristic both low — check lidar_cluster_jump_m, legs in range, or disable RF"
             )
         logger.info(" ".join(parts))
         self._acc_frames = 0
