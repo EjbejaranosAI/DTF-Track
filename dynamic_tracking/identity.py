@@ -236,7 +236,7 @@ class IdentityManager:
             n += 1
         return n
 
-    # ─── Internos ────────────────────────────────────────────────────
+    # ─── Internals ────────────────────────────────────────────────────
 
     def _collect_lost(self, tracks: List[Track], now_sec: float) -> None:
         alive = {t.track_id for t in tracks}

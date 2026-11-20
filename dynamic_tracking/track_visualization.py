@@ -105,7 +105,7 @@ def track_color_bgr(
     if tr.last_update_source == "lidar-only":
         # Blue: laser-only person never confirmed by YOLO (tentative dynamic).
         if tr.class_name == "person":
-            return (220, 90, 40)  # azul BGR fuerte
+            return (220, 90, 40)  # strong blue (BGR)
         if getattr(tr, "leg_hypothesis_active", False):
             return (200, 100, 50)
         if is_lidar_track_moving(tr, motion_speed_threshold_mps, motion_accel_threshold_mps2):

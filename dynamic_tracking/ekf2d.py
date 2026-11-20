@@ -1,4 +1,4 @@
-"""EKF 2D velocidad constante (paridad Spencer srl_nearest_neighbor_tracker / EKF 4D)."""
+"""2D constant-velocity EKF (parity with Spencer srl_nearest_neighbor_tracker / 4D EKF)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Tres colores RViz: verde / verde-azulado coast / azul."""
+"""Three RViz colours: green / teal coast / blue."""
 
 from dynamic_tracking.track_visualization import track_color_bgr
 from dynamic_tracking.types import Track

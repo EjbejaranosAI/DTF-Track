@@ -160,7 +160,7 @@ class PoseDebugLogger:
 
         persons = [t for t in tracks if str(t.class_name).lower() == "person"]
         if not persons:
-            lines.append("[POSE] tracks: ninguna persona")
+            lines.append("[POSE] tracks: no persons")
         elif robot_map_tf is None:
             for tr in sorted(persons, key=lambda t: t.track_id):
                 mx, my = tr.state()
@@ -231,7 +231,7 @@ class PersonTrackLogger:
         if yolo_detections >= 0:
             yolo_suffix = f" | YOLO: {yolo_detections} det ({yolo_ms:.0f}ms)"
         if not all_person:
-            logger.info(f"Personas: ninguna ({n_clusters} clusters LiDAR){yolo_suffix}")
+            logger.info(f"Persons: none ({n_clusters} LiDAR clusters){yolo_suffix}")
             return
         parts = []
         for tr in sorted(all_person, key=lambda t: t.track_id):
@@ -243,7 +243,7 @@ class PersonTrackLogger:
                 f"id={tr.track_id} ({x:+.2f},{y:+.2f}) {tag} v={spd:.2f} m={tr.missed_frames}"
             )
         suffix = f"  [{n_clusters} clusters]" if n_clusters >= 0 else ""
-        logger.info("Personas: " + " | ".join(parts) + suffix + yolo_suffix)
+        logger.info("Persons: " + " | ".join(parts) + suffix + yolo_suffix)
 
 
 class LidarDiagnostics:

@@ -1,4 +1,4 @@
-"""Utilidades geometricas (rotacion)."""
+"""Geometry utilities (rotation)."""
 
 import math
 from typing import Tuple

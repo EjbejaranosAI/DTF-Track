@@ -1,4 +1,4 @@
-"""EKF velocidad constante (Spencer parity)."""
+"""Constant-velocity EKF (Spencer parity)."""
 
 import numpy as np
 
